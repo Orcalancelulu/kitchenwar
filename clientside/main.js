@@ -13,6 +13,7 @@ let chunkList;
 
 let mapData;
 
+let playerIdToIndex = new Map();
 let playerList = [];
 
 //anfang debugging
@@ -23,22 +24,44 @@ let dilight = new THREE.DirectionalLight(0xFFFFFF, 1);
 scene.add(amlight, dilight);
 //ende debugging
 
-const player = (nickname, position, rotation, walkVector) => {
-  //nickname und position müssen gegeben werden, damit ein Player erstellt werden kann
+function player (id, position, model, rotation, walkVector) {
+  //nickname, model und position müssen gegeben werden, damit ein Player erstellt werden kann
   if (rotation == undefined) rotation = 0 //noch ändern #hilfe
   if (walkVector == undefined) walkVector = [0, 0] //erste Ziffer = vorne / hinten, zweite Ziffer = links / rechts
 
-  this.nickname = nickname;
+  this.id = id;
   this.position = position;
   this.rotation = rotation;
   this.walkVector = walkVector;
+  this.model = model;
+}
+
+const createPlayerModel = (pos) => {
+  const geometry = new THREE.BoxGeometry(0.25, 1, 0.25);
+  const material = new THREE.MeshStandardMaterial( {color: 0xFFFFFF} );
+  const cube = new THREE.Mesh( geometry, material );
+  scene.add( cube );
+  cube.castShadow = true;
+  cube.receiveShadow = true;
+  moveObject(cube, pos);
+  return cube;
 }
 
 const createPlayer = (pos, id, myPlayer) => {
-  let index;
+  let index = playerList.length;
 
   if (myPlayer) index = 0;
-  playerList[0] = new player(id, pos);
+
+  playerIdToIndex.set(id, index);
+  console.log(pos);
+  playerList[index] = new player(id, pos, createPlayerModel(pos));
+  console.log(playerList[index]);
+}
+
+const removePlayer = (id) => {
+  let index = playerIdToIndex.get(id);
+  playerIdToIndex.delete(id);
+  playerList.splice(index, 1)
 }
 
 const createCameraControl = () => {
@@ -206,14 +229,21 @@ ws.onmessage = (event) => {
     //als erstes schickt der server die map daten, damit die Map generiert werden kann. 
     mapData = message.mapObject;
     createScene(document.getElementById("bg"));
+
   } else if(message.header == "yourPos") {
+    //server schickt die eigene position zum spawnen
     console.log("got my position");
-    createPlayer(message.position, message.playerId);
+    createPlayer(message.data.position, message.data.playerId);
+
   } else if(message.header == "newPlayer") {
+    //falls ein neuer spieler connected, muss dieser erstellt werden
     console.log("new player connected");
-    createPlayer
+    createPlayer(message.position, message.playerId);
+
   } else if (message.header == "playerDisconnected") {
+    //falls jemand disconnected, muss dieser spieler auch verschwinden
     console.log("player disconnected");
+    removePlayer(message.playerId);
   }
 }
 

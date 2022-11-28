@@ -74,7 +74,7 @@ wss.on('connection', (ws) => {
 
   //sendet dem Client die Map Daten
   sendTo({header: "mapData", mapObject}, ws);
-  sendTo({header: "yourPos", data: {position: [10, 0, 10], rotation: 0}}, ws)
+  sendTo({header: "yourPos", data: {position: [10, 0, 10], rotation: 0, playerId: id}}, ws)
 
   console.log("id " + clients.get(id) + " connected");
 
