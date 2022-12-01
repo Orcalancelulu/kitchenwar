@@ -78,10 +78,14 @@ const createPlayer = (pos, id, myPlayer) => {
 
 const removePlayer = (id) => {
   console.log("removed player");
+
   let index = playerIdToIndex.get(id);
   scene.remove(playerList[index].model);
   playerIdToIndex.delete(id);
-  playerList.splice(index, 1)
+  playerList.splice(index, 1);
+  
+  //Liste hat sich verschoben, deshalb muss die Id zu Index Map neu erstellt werden
+  recalcPlayerMap();
 }
 
 const createCameraControl = (rot) => {
@@ -242,6 +246,14 @@ const checkInput = () => {
   })
 }
 
+const recalcPlayerMap = () => {
+  playerIdToIndex.clear();
+  let counter = 0;
+  playerList.forEach((item) => {
+    playerIdToIndex.set(item.id, counter);
+    counter++;
+  });
+}
 //anfang debugging
 createGrid();
 
@@ -303,7 +315,7 @@ ws.onmessage = (event) => {
 
   } else if (message.header == "playerDisconnected") {
     //falls jemand disconnected, muss dieser spieler auch verschwinden
-    console.log("player disconnected");
+    console.log("player disconnected: " + message.data.playerId);
     removePlayer(message.data.playerId);
   }
 }
