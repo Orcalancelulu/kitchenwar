@@ -254,11 +254,13 @@ const recalcPlayerMap = () => {
     counter++;
   });
 }
+
+
 //anfang debugging
 createGrid();
 
 moveObject(polight, [-2, 0, 2]);
-moveObject(camera, [3, 1, -3]);
+//moveObject(camera, [3, 1, -3]);
 moveObject(dilight, [-20, 10, -20]);
 /*const helper = new THREE.CameraHelper( dilight.shadow.camera );
 scene.add( helper );*/
@@ -319,11 +321,3 @@ ws.onmessage = (event) => {
     removePlayer(message.data.playerId);
   }
 }
-
-
-
-
-
-/*window.onbeforeunload = function(e) {
-  return 'Dont go';
-};*/

@@ -96,21 +96,29 @@ wss.on('connection', (ws) => {
     sendTo({header: "newPlayer", data: {position: player.position, rotation: player.rotation, playerId: player.id}}, ws)
   })
 
+  //Den anderen Spielern wird mitgeteilt, dass ein neuer Spieler dabei ist
   console.log("id " + clients.get(id) + " connected");
   sendAll({header: "newPlayer", data: {position: spawnPos, rotation: 0, playerId: id}});
 
     
   ws.on('message', (messageAsString) => {
-    if (!isJSON(messageAsString)) return;
+    if (!isJSON(messageAsString)) return; //ziemlich hässlich aber funktioniert : )
+
     let myclient =  clientList[clients.get(id)];
     if (myclient == undefined) return; //es kann passieren, dass ein client disconnected und die events immer noch ankommen. Somit ist der client schon gelöscht aber es kommen noch sachen an. deswegen einfach ignorieren.
+
     const message = JSON.parse(messageAsString);
+
+    //überprüfung, was für eine Art von Nachricht es ist
     if (message.header == "walkevent") {
       //ein spieler hat sich bewegt, neue position wird gespeichert und an den anderen spieler mitgeteilt
+      //später muss hier noch anti cheat überprüfung rein.
       myclient.position = message.data.position;
       myclient.rotation = message.data.rotation;
       sendAll({header: "walkevent", data: {id: id, rotation: message.data.rotation, walkvector: message.data.walkvector}});
+
     } else if (message.header == "rotateevent") {
+      //ein spieler hat sich gedreht, den anderen wird das nun mitgeteilt
       myclient.rotation = message.data.rotation;
       sendAll({header: "rotateevent", data: {id: id, rotation: message.data.rotation}});
     }
@@ -127,7 +135,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-
+//erstellt eine zufällige Id für einen neuen Client (es wäre theoretisch möglich 2 gleiche uuidv4s zu erstellen...)
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
