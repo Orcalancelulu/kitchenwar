@@ -16,6 +16,13 @@ let mapData;
 let playerIdToIndex = new Map();
 let playerList = [];
 
+let isKeyPressed = {keyCodes: {}}
+let keyMapList = {"KeyW": {exfunc: () => movePlayer([-1, 0], playerList[0].model, true)}, "KeyS": {exfunc: () => movePlayer([1, 0], playerList[0].model, true)}, "KeyA": {exfunc: () => movePlayer([0, -1], playerList[0].model, true)}, "KeyD": {exfunc: () => movePlayer([0, 1], playerList[0].model, true)}};
+let moveSpeed = 0.1;
+
+let isMoving = false;
+
+
 //anfang debugging
 let amlight = new THREE.AmbientLight(0xFFFFFF, 0.1);
 let polight = new THREE.PointLight(0xFFFFFF, 1);
@@ -36,6 +43,17 @@ function player (id, position, model, rotation, walkVector) {
   this.model = model;
 }
 
+const movePlayer = (vector, playerObj, ownPlayer) => {
+  isMoving = true;
+  let lookVector = new THREE.Vector3();
+  playerObj.getWorldDirection(lookVector);
+  
+  playerObj.position.add(new THREE.Vector3(lookVector.x * moveSpeed * vector[0] +lookVector.z * moveSpeed * vector[1], 0, lookVector.z * moveSpeed* vector[0] + -lookVector.x * moveSpeed* vector[1]));
+  if (!ownPlayer) return;
+  moveObject(camera, [playerObj.position.x, 2, playerObj.position.z]);
+  ws.send(JSON.stringify({header: "walkevent", data: {rotation: [playerObj.quaternion.x, playerObj.quaternion.y, playerObj.quaternion.z, playerObj.quaternion.w], walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z]}}))
+}
+
 const createPlayerModel = (pos) => {
   const geometry = new THREE.BoxGeometry(0.25, 1, 0.25);
   const material = new THREE.MeshStandardMaterial( {color: 0xFFFFFF} );
@@ -48,28 +66,40 @@ const createPlayerModel = (pos) => {
 }
 
 const createPlayer = (pos, id, myPlayer) => {
+  //console.log(playerList);
   let index = playerList.length;
-
+  if (playerIdToIndex.get(id) != undefined) return;
   if (myPlayer) index = 0;
 
   playerIdToIndex.set(id, index);
-  console.log(pos);
+  //console.log(pos);
   playerList[index] = new player(id, pos, createPlayerModel(pos));
-  console.log(playerList[index]);
+  //console.log(playerList);
 }
 
 const removePlayer = (id) => {
+  console.log("removed player");
   let index = playerIdToIndex.get(id);
+  scene.remove(playerList[index].model);
   playerIdToIndex.delete(id);
   playerList.splice(index, 1)
 }
 
-const createCameraControl = () => {
-    
-  const controls = new PointerLockControls( camera, document.body );
+const createCameraControl = (rot) => {
+  let quaternion = new THREE.Quaternion(rot[0], rot[1], rot[2], rot[3]);
+
+  camera.setRotationFromQuaternion(quaternion);
+  playerList[0].model.setRotationFromQuaternion(quaternion);
+
+  const controls = new PointerLockControls( camera, document.body, playerList[0].model, function(quat) {
+    //console.log("sending rotation")
+    //falls man läuft wird die rotation eh schon geschickt, braucht es nicht zwei mal
+    if (isMoving) return;
+    ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
+  });
+  moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
 
   document.body.addEventListener( 'click', function () {
-
     controls.lock();
   }
   , false );
@@ -84,6 +114,7 @@ const createGrid = () => {
 const animate = () => {
   requestAnimationFrame(animate);
   //console.log(camera.position);
+  checkInput();
   renderer.render(scene, camera);
 };
 
@@ -103,7 +134,8 @@ const createScene = (el) => {
   generateMap(mapData);
   resize();
   window.addEventListener('resize', resize);
-  createCameraControl();
+  
+  createListener();
   animate();
 };
 
@@ -192,6 +224,26 @@ const generateMap = (mapObject) => {
 
 };
 
+const createListener = () => {
+  console.log("listener activated");
+  document.body.addEventListener("keydown", (event) => {
+    isKeyPressed.keyCodes[event.code] = true;
+  })
+  document.body.addEventListener("keyup", (event) => {
+    isKeyPressed.keyCodes[event.code] = false;
+    isMoving = false;
+  })
+}
+
+const checkInput = () => {
+  Object.keys(isKeyPressed.keyCodes).forEach((keyId) => {
+    let key = isKeyPressed.keyCodes[keyId]
+    if(key) {
+      if (keyMapList[keyId] != undefined)
+      keyMapList[keyId].exfunc();
+    }
+  })
+}
 
 //anfang debugging
 createGrid();
@@ -203,7 +255,6 @@ moveObject(dilight, [-20, 10, -20]);
 scene.add( helper );*/
 //dilight.lookAt(new THREE.Vector3(0, 0, 0));
 dilight.castShadow = true;
-camera.lookAt(new THREE.Vector3(0, 0, 0));
 
 
 //ende debugging
@@ -215,7 +266,7 @@ camera.lookAt(new THREE.Vector3(0, 0, 0));
 
 start of websocket code*/
 
-const ws = new WebSocket("ws://localhost:7071");
+const ws = new WebSocket("ws://25.37.135.185:7071");
 
 ws.onopen = function(event) {
   console.log("ws is open!");
@@ -225,7 +276,23 @@ ws.onmessage = (event) => {
   let message = JSON.parse(event.data);
   if (message.header == "event") {
 
-  } else if(message.header == "mapData") {
+  } else if(message.header == "walkevent"){
+    let index = playerIdToIndex.get(message.data.id);
+    if (index == 0) return;
+    let movedPlayer = playerList[index];
+    //console.log([message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]])
+    let quaternion = new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]);
+    //console.log(quaternion);
+    movedPlayer.model.setRotationFromQuaternion(quaternion);
+    //console.log(movedPlayer.model.quaternion);
+    movePlayer(message.data.walkvector, movedPlayer.model, false);
+
+  } else if(message.header == "rotateevent") {
+    //console.log("recieved rotation");
+    playerList[playerIdToIndex.get(message.data.id)].rotation = message.data.rotation;
+    playerList[playerIdToIndex.get(message.data.id)].model.setRotationFromQuaternion(new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]));
+
+  }else if(message.header == "mapData") {
     //als erstes schickt der server die map daten, damit die Map generiert werden kann. 
     mapData = message.mapObject;
     createScene(document.getElementById("bg"));
@@ -233,17 +300,19 @@ ws.onmessage = (event) => {
   } else if(message.header == "yourPos") {
     //server schickt die eigene position zum spawnen
     console.log("got my position");
-    createPlayer(message.data.position, message.data.playerId);
+    playerList = [];
+    createPlayer(message.data.position, message.data.playerId, true);
+    createCameraControl(message.data.rotation);
 
   } else if(message.header == "newPlayer") {
     //falls ein neuer spieler connected, muss dieser erstellt werden
     console.log("new player connected");
-    createPlayer(message.position, message.playerId);
+    createPlayer(message.data.position, message.data.playerId, false);
 
   } else if (message.header == "playerDisconnected") {
     //falls jemand disconnected, muss dieser spieler auch verschwinden
     console.log("player disconnected");
-    removePlayer(message.playerId);
+    removePlayer(message.data.playerId);
   }
 }
 

@@ -5,6 +5,8 @@ import {
 } from 'three';
 
 const _euler = new Euler( 0, 0, 0, 'YXZ' );
+const _eulerBody = new Euler(0, 0, 0, "YXZ");
+
 const _vector = new Vector3();
 
 const _changeEvent = { type: 'change' };
@@ -15,10 +17,11 @@ const _PI_2 = Math.PI / 2;
 
 class PointerLockControls extends EventDispatcher {
 
-	constructor( camera, domElement ) {
+	constructor( camera, domElement, bodyElement, funcToCallOnMove) {
 
 		super();
 
+		//this.bodyElement = bodyElement;
 		this.domElement = domElement;
 		this.isLocked = false;
 
@@ -38,14 +41,27 @@ class PointerLockControls extends EventDispatcher {
 			const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
 			const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
 
+			//console.log(movementX);
 			_euler.setFromQuaternion( camera.quaternion );
+			//console.log(bodyElement.quaternion);
+			_eulerBody.setFromQuaternion(bodyElement.quaternion );
+			
+
+			_eulerBody.y -= movementX * 0.002 * scope.pointerSpeed;
+			_eulerBody.x = 0;
 
 			_euler.y -= movementX * 0.002 * scope.pointerSpeed;
 			_euler.x -= movementY * 0.002 * scope.pointerSpeed;
 
 			_euler.x = Math.max( _PI_2 - scope.maxPolarAngle, Math.min( _PI_2 - scope.minPolarAngle, _euler.x ) );
+			
+
 
 			camera.quaternion.setFromEuler( _euler );
+			bodyElement.quaternion.setFromEuler(_eulerBody);
+			funcToCallOnMove(bodyElement.quaternion)
+
+
 
 			scope.dispatchEvent( _changeEvent );
 
