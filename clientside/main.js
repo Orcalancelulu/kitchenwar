@@ -44,12 +44,14 @@ function player (id, position, model, rotation, walkVector) {
 }
 
 const movePlayer = (vector, playerObj, ownPlayer) => {
-  isMoving = true;
   let lookVector = new THREE.Vector3();
   playerObj.getWorldDirection(lookVector);
   
   playerObj.position.add(new THREE.Vector3(lookVector.x * moveSpeed * vector[0] +lookVector.z * moveSpeed * vector[1], 0, lookVector.z * moveSpeed* vector[0] + -lookVector.x * moveSpeed* vector[1]));
   if (!ownPlayer) return;
+
+  //own player is moving
+  isMoving = true;
   moveObject(camera, [playerObj.position.x, 2, playerObj.position.z]);
   ws.send(JSON.stringify({header: "walkevent", data: {rotation: [playerObj.quaternion.x, playerObj.quaternion.y, playerObj.quaternion.z, playerObj.quaternion.w], walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z]}}))
 }
@@ -66,15 +68,12 @@ const createPlayerModel = (pos) => {
 }
 
 const createPlayer = (pos, id, myPlayer) => {
-  //console.log(playerList);
   let index = playerList.length;
   if (playerIdToIndex.get(id) != undefined) return;
   if (myPlayer) index = 0;
 
   playerIdToIndex.set(id, index);
-  //console.log(pos);
   playerList[index] = new player(id, pos, createPlayerModel(pos));
-  //console.log(playerList);
 }
 
 const removePlayer = (id) => {
@@ -92,7 +91,7 @@ const createCameraControl = (rot) => {
   playerList[0].model.setRotationFromQuaternion(quaternion);
 
   const controls = new PointerLockControls( camera, document.body, playerList[0].model, function(quat) {
-    //console.log("sending rotation")
+
     //falls man läuft wird die rotation eh schon geschickt, braucht es nicht zwei mal
     if (isMoving) return;
     ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
@@ -113,7 +112,6 @@ const createGrid = () => {
 
 const animate = () => {
   requestAnimationFrame(animate);
-  //console.log(camera.position);
   checkInput();
   renderer.render(scene, camera);
 };
@@ -174,7 +172,6 @@ const moveObject = (object, position) => {
   object.position.y = position[1];
   object.position.z = position[2];
 
-  //console.log(object.position);
 };
 
 const createObject = (object) => {
@@ -266,7 +263,7 @@ dilight.castShadow = true;
 
 start of websocket code*/
 
-const ws = new WebSocket("ws://25.37.135.185:7071");
+const ws = new WebSocket("ws://localhost:7071");
 
 ws.onopen = function(event) {
   console.log("ws is open!");
@@ -280,15 +277,11 @@ ws.onmessage = (event) => {
     let index = playerIdToIndex.get(message.data.id);
     if (index == 0) return;
     let movedPlayer = playerList[index];
-    //console.log([message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]])
     let quaternion = new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]);
-    //console.log(quaternion);
     movedPlayer.model.setRotationFromQuaternion(quaternion);
-    //console.log(movedPlayer.model.quaternion);
     movePlayer(message.data.walkvector, movedPlayer.model, false);
 
   } else if(message.header == "rotateevent") {
-    //console.log("recieved rotation");
     playerList[playerIdToIndex.get(message.data.id)].rotation = message.data.rotation;
     playerList[playerIdToIndex.get(message.data.id)].model.setRotationFromQuaternion(new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]));
 
@@ -299,7 +292,6 @@ ws.onmessage = (event) => {
 
   } else if(message.header == "yourPos") {
     //server schickt die eigene position zum spawnen
-    console.log("got my position");
     playerList = [];
     createPlayer(message.data.position, message.data.playerId, true);
     createCameraControl(message.data.rotation);

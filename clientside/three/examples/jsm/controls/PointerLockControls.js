@@ -59,6 +59,8 @@ class PointerLockControls extends EventDispatcher {
 
 			camera.quaternion.setFromEuler( _euler );
 			bodyElement.quaternion.setFromEuler(_eulerBody);
+
+			//console.log("should be moving");
 			funcToCallOnMove(bodyElement.quaternion)
 
 
