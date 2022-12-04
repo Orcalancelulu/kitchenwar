@@ -29,6 +29,7 @@ let mapObject = {
   }
 }
 
+
 function recalculateClients() {
   clients.clear();
   let counter = 0;
