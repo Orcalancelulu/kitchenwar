@@ -11,30 +11,41 @@ let chunkSize = 4;
 let chunkXYToIndex;
 let chunkList;
 
-let dateLastFrame = 0;
-
 let mapData;
 
 let playerIdToIndex = new Map();
 let playerList = [];
 
 let isKeyPressed = {keyCodes: {}}
-let keyMapList = {"KeyW": {exfunc: () => movePlayer([-1, 0], playerList[0].model, true)}, "KeyS": {exfunc: () => movePlayer([1, 0], playerList[0].model, true)}, "KeyA": {exfunc: () => movePlayer([0, -1], playerList[0].model, true)}, "KeyD": {exfunc: () => movePlayer([0, 1], playerList[0].model, true)}};
+let keyMapList = {"KeyW": {exfunc: () => movePlayer([-1, 0], playerList[0].model, true)}, "KeyS": {exfunc: () => movePlayer([1, 0], playerList[0].model, true)}, "KeyA": {exfunc: () => movePlayer([0, -1], playerList[0].model, true)}, "KeyD": {exfunc: () => movePlayer([0, 1], playerList[0].model, true)}, "Space": {exfunc: () => wantToJump()}};
 let moveSpeed = 0.1;
 
 let isMoving = false;
 
+let playerSize = [0.25, 1, 0.25];
+
+
+
+//erste 3 Zahlen für bounds, nächste 3 für playerPosition, nächste für extra abstand, damit man im nächsten frame nicht schon wieder drinn steckt und die letzte ziffer, damit man zurück zum rand des objekts kommt
+//sechs verschiedene fälle, da das objekt an 6 verschiedenen seiten ankommen kann (würfel hat 6 seiten)
 let whereToMoveAtCollision = {
   0: [1, 0, 0, 0, 1, 1, -0.01, -1],
   1: [1, 0, 0, 0, 1, 1, 0.01, 1],
   2: [0, 1, 0, 1, 0, 1, -0.01, -1],
-  3: [0, 1, 0, 1, 0, 1, 0.01, 1],
+  3: [0, 1, 0, 1, 0, 1, 0, 1],
   4: [0, 0, 1, 1, 1, 0, -0.01, -1],
   5: [0, 0, 1, 1, 1, 0, 0.01, 1]
 }
 
 
 //anfang debugging
+
+document.body.addEventListener("click", (event)=> {
+  let lookVector = new THREE.Vector3;
+  camera.getWorldDirection(lookVector);
+  ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
+})
+
 let amlight = new THREE.AmbientLight(0xFFFFFF, 0.1);
 let polight = new THREE.PointLight(0xFFFFFF, 1);
 let dilight = new THREE.DirectionalLight(0xFFFFFF, 1);
@@ -52,6 +63,8 @@ function player (id, position, model, rotation, walkVector) {
   this.rotation = rotation;
   this.walkVector = walkVector;
   this.model = model;
+  this.isGrounded = false;
+  this.downVel = 0;
 }
 
 const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
@@ -72,15 +85,23 @@ const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   checkPlayerCollision(afterWalk);
 
   isMoving = true;
-  moveObject(camera, [playerObj.position.x, 2, playerObj.position.z]);
+  moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
   ws.send(JSON.stringify({header: "walkevent", data: {rotation: [playerObj.quaternion.x, playerObj.quaternion.y, playerObj.quaternion.z, playerObj.quaternion.w], walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z]}}))
 }
 
 const checkPlayerCollision = (afterMove) => {
-  let playerBounds = getBoxBounds(afterMove, [0.25, 1, 0.25]);
+  let playerBounds = getBoxBounds(afterMove, playerSize);
 
   let chunksToCheck = findChunkWithCoord([afterMove[0], afterMove[2]], true);
-  //console.log(chunksToCheck);
+  
+  playerList[0].isGrounded = false;
+  //spieler landet auf dem Boden
+  if (afterMove[1]-playerSize[1]*0.5 <= 0) {
+    playerList[0].isGrounded = true;
+    playerList[0].model.position.y = playerSize[1]*0.5;
+    //console.log("standing");
+  }
+
   chunksToCheck.forEach((chunk) => {
     chunk = chunkList[chunk];
     Object.keys(chunk.objects).forEach((key) => {
@@ -97,9 +118,13 @@ const checkPlayerCollision = (afterMove) => {
         }
         let smallestDis = Math.min(...disBounds);
         let index = disBounds.indexOf(smallestDis);
+        if (index == 3) { //landed / standing on something
+          //console.log("standing");
+          playerList[0].isGrounded = true;
+        }
         let moveMap = whereToMoveAtCollision[index]
         bounds[index] +=  moveMap[6];
-        let playerSize = [0.25, 1, 0.25];
+        //let playerSize = [0.5, 2, 0.5];
         let newPos = [afterMove[0] * moveMap[3] + bounds[index] * moveMap[0] + playerSize[0] * 0.5 * moveMap[0] * moveMap[7], afterMove[1] * moveMap[4] + bounds[index] * moveMap[1] + playerSize[1] * 0.5 * moveMap[1] * moveMap[7], afterMove[2] * moveMap[5] + bounds[index] * moveMap[2] + playerSize[2] * 0.5 * moveMap[2] * moveMap[7]];
         
         playerList[0].position = newPos;
@@ -111,7 +136,7 @@ const checkPlayerCollision = (afterMove) => {
 }
 
 const createPlayerModel = (pos) => {
-  const geometry = new THREE.BoxGeometry(0.25, 1, 0.25);
+  const geometry = new THREE.BoxGeometry(...playerSize);
   const material = new THREE.MeshStandardMaterial( {color: 0xFFFFFF} );
   const cube = new THREE.Mesh( geometry, material );
   scene.add( cube );
@@ -160,6 +185,14 @@ const removePlayer = (id) => {
   recalcPlayerMap();
 }
 
+const wantToJump = () => {
+  //console.log(playerList[0].isGrounded);
+  if (!playerList[0].isGrounded) return;
+  playerList[0].isGrounded = false;
+  playerList[0].downVel = 0.1;
+  playerList[0].model.position.y += 0.01;
+}
+
 const createCameraControl = (rot) => {
   let quaternion = new THREE.Quaternion(rot[0], rot[1], rot[2], rot[3]);
 
@@ -186,11 +219,31 @@ const createGrid = () => {
   scene.add( gridHelper );
 };
 
+const applyPhysics = () => {
+  //console.log(playerList[0].isGrounded);
+  if (playerList[0] == undefined) return;
+  if (playerList[0].isGrounded) { 
+    playerList[0].downVel = 0; 
+    return; 
+  }
+
+  playerList[0].downVel -= 0.005;
+  playerList[0].model.position.add(new THREE.Vector3(0, playerList[0].downVel, 0));
+  playerList[0].position = [playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z];
+
+  checkPlayerCollision(playerList[0].position);
+
+  moveObject(camera, [playerList[0].position[0], playerList[0].position[1]+playerSize[1]*0.25, playerList[0].position[2]]);
+
+  ws.send(JSON.stringify({header: "walkevent", data: {position: playerList[0].position, rotation: [playerList[0].model.quaternion.x, playerList[0].model.quaternion.y, playerList[0].model.quaternion.z, playerList[0].model.quaternion.w]}}))
+  //console.log(playerList[0].position);
+
+}
+
 const animate = () => {
-  //console.log(Date.now() - dateLastFrame)
-  //dateLastFrame = Date.now();
   requestAnimationFrame(animate);
   checkInput();
+  applyPhysics();
   renderer.render(scene, camera);
 };
 
@@ -203,7 +256,7 @@ const resize = () => {
 };
 
 const createScene = (el) => {
-  renderer = new THREE.WebGLRenderer({canvas: el });
+  renderer = new THREE.WebGLRenderer({canvas: el});
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -316,6 +369,7 @@ const createListener = () => {
   console.log("listener activated");
   document.body.addEventListener("keydown", (event) => {
     isKeyPressed.keyCodes[event.code] = true;
+    
   })
   document.body.addEventListener("keyup", (event) => {
     isKeyPressed.keyCodes[event.code] = false;
@@ -353,20 +407,6 @@ moveObject(dilight, [-20, 10, -20]);
 scene.add( helper );*/
 //dilight.lookAt(new THREE.Vector3(0, 0, 0));
 dilight.castShadow = true;
-
-
-let myBox1 = {
-  position: [0, 0, 0],
-  dimensions: [2, 5, 1]
-}
-
-let myBox2 = {
-  position: [1, 2, 1],
-  dimensions: [2, 5, 1]
-}
-
-console.log(doBoxesCollide(getBoxBounds(myBox1.position, myBox1.dimensions), getBoxBounds(myBox2.position, myBox2.dimensions)));
-
 //ende debugging
 
 
@@ -392,7 +432,10 @@ ws.onmessage = (event) => {
     let movedPlayer = playerList[index];
     let quaternion = new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]);
     movedPlayer.model.setRotationFromQuaternion(quaternion);
-    movePlayer(message.data.walkvector, movedPlayer.model, false, message.id);
+
+    moveObject(playerList[index].model, message.data.position)
+    playerList[index].position = message.data.position;
+    //movePlayer(message.data.walkvector, movedPlayer.model, false, message.id);
 
   } else if(message.header == "rotateevent") {
     playerList[playerIdToIndex.get(message.data.id)].rotation = message.data.rotation;

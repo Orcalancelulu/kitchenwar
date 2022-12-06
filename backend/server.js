@@ -1,12 +1,17 @@
+const THREE = require("three");
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 7071 });
 
 let clientList = [];
+let scene = new THREE.Scene();
+
 //let id;
 const clients = new Map();
 
 //zum debuggen mal hardcoded. später soll es noch aus einem file kommen
-let spawnPos = [1, 1, 1];
+let spawnPos = [1, 15, 1];
+
+let playerSize = [0.25, 1, 0.25];
 
 let mapObject = {
   skybox: 0x00FFFF,
@@ -28,7 +33,7 @@ let mapObject = {
    }
   }
 }
-
+//fertig hardcoded
 
 function recalculateClients() {
   clients.clear();
@@ -39,8 +44,36 @@ function recalculateClients() {
   });
 }
 
+function moveObject(object, position) {
+  object.position.x = position[0];
+  object.position.y = position[1];
+  object.position.z = position[2];
+}
+
+function createBasicObject(obj, shouldReturn) {
+  let geo = new THREE.BoxGeometry(obj.size[0], obj.size[1], obj.size[2]);
+  let mat = new THREE.MeshBasicMaterial();
+  let model = new THREE.Mesh(geo, mat);
+  scene.add(model);
+  moveObject(model, obj.position);
+
+  if (shouldReturn) return model;
+}
+
+function createScene() {
+  Object.keys(mapObject.objects).forEach((key) => {
+    let objectToCreate = mapObject.objects[key];
+    createBasicObject(objectToCreate);
+  })
+}
+
+function rayChecker(startVec, dirVec, near, far) {
+  //console.log(startVec);
+  
+}
+
 //client Objekt Constructor (keine Ahnung ob das schöner geht)
-function client(id, ws, position, rotation, hp) {
+function client(id, ws, position, model, rotation, hp) {
   if (position == undefined) position = [0, 0, 0];
   if (rotation == undefined) rotation = 0;
   if (hp == undefined) hp = 100;
@@ -50,6 +83,7 @@ function client(id, ws, position, rotation, hp) {
   this.position = position;
   this.rotation = rotation;
   this.hp = hp;
+  this.model = model
 }
 
 //check if message from client is JSON data
@@ -86,7 +120,7 @@ wss.on('connection', (ws) => {
   clients.set(id, clientList.length);
 
   //speichert infos, wie position, hp, usw. pro spieler
-  clientList.push(new client(id, ws, spawnPos));
+  clientList.push(new client(id, ws, spawnPos, createBasicObject({size: playerSize, position: spawnPos}, true)));
 
   //sendet dem Client die Map Daten
   sendTo({header: "mapData", mapObject}, ws);
@@ -101,7 +135,8 @@ wss.on('connection', (ws) => {
   console.log("id " + clients.get(id) + " connected");
   sendAll({header: "newPlayer", data: {position: spawnPos, rotation: 0, playerId: id}});
 
-    
+  
+
   ws.on('message', (messageAsString) => {
     if (!isJSON(messageAsString)) return; //ziemlich hässlich aber funktioniert : )
 
@@ -116,12 +151,20 @@ wss.on('connection', (ws) => {
       //später muss hier noch anti cheat überprüfung rein.
       myclient.position = message.data.position;
       myclient.rotation = message.data.rotation;
-      sendAll({header: "walkevent", data: {id: id, rotation: message.data.rotation, walkvector: message.data.walkvector}});
+      sendAll({header: "walkevent", data: {id: id, rotation: message.data.rotation, position: message.data.position}});
+      moveObject(clientList[clients.get(id)].model, message.data.position);
 
     } else if (message.header == "rotateevent") {
       //ein spieler hat sich gedreht, den anderen wird das nun mitgeteilt
       myclient.rotation = message.data.rotation;
       sendAll({header: "rotateevent", data: {id: id, rotation: message.data.rotation}});
+
+    } else if (message.header == "attacking") {
+      //console.log(message.data.position);
+      let startVec = new THREE.Vector3(message.data.position[0], message.data.position[1], message.data.position[2]);
+      let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
+      rayChecker(startVec, dirVec, 0.01, 30);
+
     }
   });
 
