@@ -1,12 +1,15 @@
+const { Mesh } = require("three");
 const THREE = require("three");
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 7071 });
 
 let clientList = [];
-let scene = new THREE.Scene();
+const scene = new THREE.Scene();
 
 //let id;
 const clients = new Map();
+
+const raycaster = new THREE.Raycaster();
 
 //zum debuggen mal hardcoded. später soll es noch aus einem file kommen
 let spawnPos = [1, 15, 1];
@@ -21,7 +24,7 @@ let mapObject = {
       id: 778828,
       shape: "cube",
       position: [0, 1, 0],
-      size: [1, 1, 1], //width, height, depth
+      size: [1.1, 1.1, 1.1], //width, height, depth
       color: 0x0000FF //blau
     },
     cube917322: { //random id nummer
@@ -48,6 +51,8 @@ function moveObject(object, position) {
   object.position.x = position[0];
   object.position.y = position[1];
   object.position.z = position[2];
+
+  object.updateMatrixWorld(); //hat ein bisschen lange gedauert bis ich rausgefunden hab, dass es das braucht damit der Raycaster funktioniert...
 }
 
 function createBasicObject(obj, shouldReturn) {
@@ -55,6 +60,8 @@ function createBasicObject(obj, shouldReturn) {
   let mat = new THREE.MeshBasicMaterial();
   let model = new THREE.Mesh(geo, mat);
   scene.add(model);
+
+  model.name = "id: " + obj.id;
   moveObject(model, obj.position);
 
   if (shouldReturn) return model;
@@ -68,8 +75,12 @@ function createScene() {
 }
 
 function rayChecker(startVec, dirVec, near, far) {
-  //console.log(startVec);
-  
+  raycaster.set(startVec, dirVec, near, far);
+  const intersects = raycaster.intersectObjects(scene.children);
+
+  if (intersects.length > 0) {
+    console.log(intersects[0].object.name);
+  }
 }
 
 //client Objekt Constructor (keine Ahnung ob das schöner geht)
@@ -112,6 +123,8 @@ function sendTo(messageToSend, clientToReceive) {
   clientToReceive.send(JSON.stringify(messageToSend));
 }
 
+createScene();
+
 wss.on('connection', (ws) => {
   //chancen, dass es zwei gleiche uuidv4 gibt, sind ziemlich gering
   const id = uuidv4();
@@ -120,7 +133,7 @@ wss.on('connection', (ws) => {
   clients.set(id, clientList.length);
 
   //speichert infos, wie position, hp, usw. pro spieler
-  clientList.push(new client(id, ws, spawnPos, createBasicObject({size: playerSize, position: spawnPos}, true)));
+  clientList.push(new client(id, ws, spawnPos, createBasicObject({size: playerSize, position: spawnPos, id: "player" + id}, true)));
 
   //sendet dem Client die Map Daten
   sendTo({header: "mapData", mapObject}, ws);
@@ -161,6 +174,7 @@ wss.on('connection', (ws) => {
 
     } else if (message.header == "attacking") {
       //console.log(message.data.position);
+      //console.log(message);
       let startVec = new THREE.Vector3(message.data.position[0], message.data.position[1], message.data.position[2]);
       let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
       rayChecker(startVec, dirVec, 0.01, 30);

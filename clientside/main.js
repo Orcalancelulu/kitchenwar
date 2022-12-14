@@ -67,6 +67,15 @@ function player (id, position, model, rotation, walkVector) {
   this.downVel = 0;
 }
 
+ const createSkybox = async () => {
+  const loader = new THREE.CubeTextureLoader();
+  loader.setPath('texture/');
+  const cubeTex = loader.load( [
+    "2left.png", "3right.png", "4up.png", "5down.png", "0front.png", "1back.png"
+  ])
+  scene.background = cubeTex;
+}
+
 const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   let index = playerIdToIndex.get(playerId);
   if (index == undefined) index = 0;
@@ -211,6 +220,14 @@ const createCameraControl = (rot) => {
     controls.lock();
   }
   , false );
+
+  const map = new THREE.TextureLoader().load( 'texture/crosshair.png' );
+  const material = new THREE.SpriteMaterial( { map: map } );
+
+  const sprite = new THREE.Sprite( material );
+  scene.add( sprite );
+  //sprite.position.z = -3;
+  //sprite.position.set()
 }
 
 const createGrid = () => {
@@ -265,6 +282,7 @@ const createScene = (el) => {
   window.addEventListener('resize', resize);
   
   createListener();
+  createSkybox();
   animate();
 };
 
