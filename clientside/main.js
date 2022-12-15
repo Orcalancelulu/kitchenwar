@@ -221,11 +221,30 @@ const createCameraControl = (rot) => {
   }
   , false );
 
-  const map = new THREE.TextureLoader().load( 'texture/crosshair.png' );
-  const material = new THREE.SpriteMaterial( { map: map } );
+  
+  const _VS = `
+  uniform vec3 scale;
+  uniform float aspect;
+  void main() {
+    gl_Position = vec4(position.x / aspect * scale.x, position.y * scale.y, position.z * scale.z, 1.0);
+  }`;
 
-  const sprite = new THREE.Sprite( material );
-  scene.add( sprite );
+  const _FS = `
+  void main() {
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+  }
+  `
+
+  const crossHairSize = 0.02;
+  console.log(camera.aspect);
+  const material = new THREE.ShaderMaterial({uniforms: {scale: {value: new THREE.Vector3(crossHairSize, crossHairSize, 1)}, aspect: {value: camera.aspect}}, vertexShader: _VS, fragmentShader: _FS});
+
+  const testModel = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), material);
+
+  testModel.position.set(0, 0, -1);
+  testModel.frustumCulled = false;
+
+  scene.add( testModel );
   //sprite.position.z = -3;
   //sprite.position.set()
 }
