@@ -185,10 +185,13 @@ wss.on('connection', (ws) => {
   //falls ein client disconnected
   ws.on("close", () => {
     sendAll({header: "playerDisconnected", data: {playerId: id}}); //teilt den Clients mit, dass ein spieler gegangen ist
+    scene.remove(clientList[clients.get(id)].model); //löscht das Model des Spielers, welches gebraucht wird, um Raycasts durchzuführen
     clientList.splice(clients.get(id), 1); //löscht den Listeneintrag ohne eine freie Stelle zurückzulassen
     recalculateClients(); //id zu index liste neu berechnen, da sich die Liste durch das Löschen eines Elementes verschoben hat.
+    
 
     console.log(id + " diconnected. " + clientList.length + " Players remaining");
+
 
   });
 });
