@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {PointerLockControls} from "PointerLockControls"
-
+import { GLTFLoader } from 'GLTFLoader';
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -67,7 +67,7 @@ function player (id, position, model, rotation, walkVector) {
   this.downVel = 0;
 }
 
- const createSkybox = async () => {
+const createSkybox = async () => {
   const loader = new THREE.CubeTextureLoader();
   loader.setPath('texture/');
   const cubeTex = loader.load( [
@@ -75,6 +75,24 @@ function player (id, position, model, rotation, walkVector) {
   ])
   scene.background = cubeTex;
 }
+
+const addGltfToScene = () => {
+  const loader = new GLTFLoader();
+  loader.load("models/1.0 run cycle/run cycle.glb", function ( gltf ) {
+    let skinnedMesh = gltf.scene.children[0].children[3];
+    scene.add(skinnedMesh);
+    console.log(gltf.scene);
+  },	function ( xhr ) {
+
+		console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+
+	}, 	function ( error ) {
+
+		console.log( 'An error happened' );
+
+	})
+}
+
 
 const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   let index = playerIdToIndex.get(playerId);
@@ -446,6 +464,7 @@ scene.add( helper );*/
 dilight.castShadow = true;
 //ende debugging
 
+addGltfToScene();
 
 /*end of THREE code
 
