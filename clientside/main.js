@@ -128,7 +128,7 @@ const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
 
   isMoving = true;
   moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
-  ws.send(JSON.stringify({header: "walkevent", data: {rotation: [playerObj.quaternion.x, playerObj.quaternion.y, playerObj.quaternion.z, playerObj.quaternion.w], walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z]}}))
+  ws.send(JSON.stringify({header: "walkevent", data: {rotation: [playerObj.quaternion.x, playerObj.quaternion.y, playerObj.quaternion.z, playerObj.quaternion.w], walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z], isGrounded: playerList[index].isGrounded}}))
 }
 
 const checkPlayerCollision = (afterMove) => {
@@ -198,12 +198,12 @@ const createPlayer = (pos, id, myPlayer) => {
 }
 
 const updateAnimations = () => {
-  playerList.forEach(player => {
-    if (!player.isGrounded) {
+  playerList.forEach(playerInList => {
+    if (!playerInList.isGrounded) { //jump pose
 
-    } else if (player.isWalking) {
+    } else if (playerInList.isWalking) { //walking animation
       mixer.update(0.02);
-      player.isWalking = false;
+      playerInList.isWalking = false;
     } else {
 
     }
@@ -318,7 +318,7 @@ const applyPhysics = () => {
 
   moveObject(camera, [playerList[0].position[0], playerList[0].position[1]+playerSize[1]*0.25, playerList[0].position[2]]);
 
-  ws.send(JSON.stringify({header: "walkevent", data: {position: playerList[0].position, rotation: [playerList[0].model.quaternion.x, playerList[0].model.quaternion.y, playerList[0].model.quaternion.z, playerList[0].model.quaternion.w]}}))
+  ws.send(JSON.stringify({header: "walkevent", data: {position: playerList[0].position, rotation: [playerList[0].model.quaternion.x, playerList[0].model.quaternion.y, playerList[0].model.quaternion.z, playerList[0].model.quaternion.w], isGrounded: false}}))
   //console.log(playerList[0].position);
 
 }
@@ -518,13 +518,13 @@ ws.onmessage = (event) => {
     
     let movedPlayer = playerList[index];
     movedPlayer.isWalking = true;
+    movedPlayer.isGrounded = message.data.isGrounded;
 
     let quaternion = new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]);
     movedPlayer.model.setRotationFromQuaternion(quaternion);
 
     moveObject(playerList[index].model, message.data.position)
     playerList[index].position = message.data.position;
-    //movePlayer(message.data.walkvector, movedPlayer.model, false, message.id);
 
   } else if(message.header == "rotateevent") {
     playerList[playerIdToIndex.get(message.data.id)].rotation = message.data.rotation;

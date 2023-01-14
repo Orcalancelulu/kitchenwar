@@ -164,7 +164,7 @@ wss.on('connection', (ws) => {
       //später muss hier noch anti cheat überprüfung rein.
       myclient.position = message.data.position;
       myclient.rotation = message.data.rotation;
-      sendAll({header: "walkevent", data: {id: id, rotation: message.data.rotation, position: message.data.position}});
+      sendAll({header: "walkevent", data: {id: id, rotation: message.data.rotation, position: message.data.position, isGrounded: message.data.isGrounded}});
       moveObject(clientList[clients.get(id)].model, message.data.position);
 
     } else if (message.header == "rotateevent") {
