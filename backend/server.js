@@ -179,6 +179,8 @@ wss.on('connection', (ws) => {
       let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
       rayChecker(startVec, dirVec, 0.01, 30);
 
+    } else if (message.header == "joiningMatch") {
+      
     }
   });
 
