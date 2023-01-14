@@ -205,7 +205,7 @@ const updateAnimations = () => {
       mixer.update(0.02);
       player.isWalking = false;
     } else {
-      
+
     }
 
   });
@@ -515,7 +515,10 @@ ws.onmessage = (event) => {
   } else if(message.header == "walkevent"){
     let index = playerIdToIndex.get(message.data.id);
     if (index == 0) return;
+    
     let movedPlayer = playerList[index];
+    movedPlayer.isWalking = true;
+
     let quaternion = new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]);
     movedPlayer.model.setRotationFromQuaternion(quaternion);
 
