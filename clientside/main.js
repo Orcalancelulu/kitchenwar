@@ -3,7 +3,7 @@ import {PointerLockControls} from "PointerLockControls"
 import { GLTFLoader } from 'GLTFLoader';
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
 let renderer;
 
 let mapSize = 120; //mit einer mapSize von 120 * 120 und einer Chunkgrösse von 4*4 gibt es 30*30 Chunks --> 900 Chunks insgesamt
@@ -23,6 +23,9 @@ let moveSpeed = 0.1;
 let isMoving = false;
 
 let playerSize = [0.25, 1, 0.25];
+
+let mixer;
+
 
 
 
@@ -65,6 +68,7 @@ function player (id, position, model, rotation, walkVector) {
   this.model = model;
   this.isGrounded = false;
   this.downVel = 0;
+  this.isWalking = false;
 }
 
 const createSkybox = async () => {
@@ -78,10 +82,19 @@ const createSkybox = async () => {
 
 const addGltfToScene = () => {
   const loader = new GLTFLoader();
-  loader.load("models/1.0 run cycle/run cycle.glb", function ( gltf ) {
-    let skinnedMesh = gltf.scene.children[0].children[3];
-    scene.add(skinnedMesh);
-    console.log(gltf.scene);
+  loader.load("models/wasserkocher/wasserkocher.glb", function ( gltf ) {
+    gltf.scene.scale.set(0.2, 0.2, 0.2);
+    moveObject(gltf.scene, [2, 0.5, 2]);
+    scene.add(gltf.scene);
+
+    console.log(gltf);
+    mixer = new THREE.AnimationMixer(gltf.scene);
+    let action = mixer.clipAction(gltf.animations[0]);
+    console.log(action);
+
+    action.play();
+
+
   },	function ( xhr ) {
 
 		console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
@@ -97,6 +110,8 @@ const addGltfToScene = () => {
 const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   let index = playerIdToIndex.get(playerId);
   if (index == undefined) index = 0;
+
+  playerList[index].isWalking = true;
 
   let lookVector = new THREE.Vector3();
   playerObj.getWorldDirection(lookVector);
@@ -180,6 +195,20 @@ const createPlayer = (pos, id, myPlayer) => {
 
   playerIdToIndex.set(id, index);
   playerList[index] = new player(id, pos, createPlayerModel(pos));
+}
+
+const updateAnimations = () => {
+  playerList.forEach(player => {
+    if (!player.isGrounded) {
+
+    } else if (player.isWalking) {
+      mixer.update(0.02);
+      player.isWalking = false;
+    } else {
+      
+    }
+
+  });
 }
 
 const doBoxesCollide = (box1, box2) => {
@@ -298,11 +327,12 @@ const animate = () => {
   requestAnimationFrame(animate);
   checkInput();
   applyPhysics();
+  updateAnimations();
   renderer.render(scene, camera);
 };
 
 const resize = () => {
-  renderer.setSize(window.innerWidth, window.innerHeight)
+  renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   
   camera.updateProjectionMatrix();
