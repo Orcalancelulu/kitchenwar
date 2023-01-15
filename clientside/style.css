@@ -2,15 +2,41 @@ body {
     margin: 0;
     padding: 0;
     overflow: hidden; /* Hide scrollbars */
-
+    font-family: Arial Black,Arial Bold,sans-serif;;
 }
 
 #bg {
     position: absolute;
-    
+    z-index: -1;
     left: 0;
     right: 0;
     width: 100%;
     height: 100%;
+}
+
+
+#menue {
+    padding-top: 350px;
+}
+
+#playButton {
+    display: block;
+    margin: auto;
+    padding: 20px 50px 20px 50px;
+    font-size: 30px;
+    font-weight: bold;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.6);
+    border: none;
+    user-select: none;
+}
+
+#playButton:hover {
+    cursor: pointer;
+    filter: brightness(80%);
+}
+
+#playButton:focus {
+    outline: none;
 }
 

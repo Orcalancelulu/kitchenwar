@@ -161,7 +161,7 @@ class PointerLockControls extends EventDispatcher {
 		};
 
 		this.unlock = function () {
-
+			
 			scope.domElement.ownerDocument.exitPointerLock();
 
 		};

@@ -180,6 +180,7 @@ wss.on('connection', (ws) => {
       rayChecker(startVec, dirVec, 0.01, 30);
 
     } else if (message.header == "joiningMatch") {
+      //spieler war vorher noch im menü, jetzt aber im game mit charakter
       
     }
   });

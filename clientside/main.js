@@ -25,7 +25,9 @@ let isMoving = false;
 let playerSize = [0.25, 1, 0.25];
 
 let mixer;
+let areControlsLocked = false;
 
+let controls;
 
 
 
@@ -39,7 +41,6 @@ let whereToMoveAtCollision = {
   4: [0, 0, 1, 1, 1, 0, -0.01, -1],
   5: [0, 0, 1, 1, 1, 0, 0.01, 1]
 }
-
 
 //anfang debugging
 
@@ -105,7 +106,6 @@ const addGltfToScene = () => {
 
 	})
 }
-
 
 const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   let index = playerIdToIndex.get(playerId);
@@ -255,7 +255,7 @@ const createCameraControl = (rot) => {
   camera.setRotationFromQuaternion(quaternion);
   playerList[0].model.setRotationFromQuaternion(quaternion);
 
-  const controls = new PointerLockControls( camera, document.body, playerList[0].model, function(quat) {
+  controls = new PointerLockControls( camera, document.body, playerList[0].model, function(quat) {
 
     //falls man läuft wird die rotation eh schon geschickt, braucht es nicht zwei mal
     if (isMoving) return;
@@ -263,10 +263,17 @@ const createCameraControl = (rot) => {
   });
   moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
 
-  document.body.addEventListener( 'click', function () {
+  document.getElementById("playButton").addEventListener( 'click', function () {
     controls.lock();
-  }
-  , false );
+  });
+
+  controls.addEventListener('lock', function () {
+    document.getElementById("menue").style.display = 'none';
+  } );
+
+  controls.addEventListener('unlock', function () {
+    document.getElementById("menue").style.display = 'block';
+  } );
 
   
   const _VS = `
@@ -283,18 +290,19 @@ const createCameraControl = (rot) => {
   `
 
   const crossHairSize = 0.02;
-  console.log(camera.aspect);
+  
   const material = new THREE.ShaderMaterial({uniforms: {scale: {value: new THREE.Vector3(crossHairSize, crossHairSize, 1)}, aspect: {value: camera.aspect}}, vertexShader: _VS, fragmentShader: _FS});
 
-  const testModel = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), material);
+  const crosshair = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), material);
 
-  testModel.position.set(0, 0, -1);
-  testModel.frustumCulled = false;
+  crosshair.position.set(0, 0, -1);
+  crosshair.frustumCulled = false;
 
-  scene.add( testModel );
+  scene.add( crosshair );
   //sprite.position.z = -3;
   //sprite.position.set()
 }
+
 
 const createGrid = () => {
   const gridHelper = new THREE.GridHelper(120, 29);
