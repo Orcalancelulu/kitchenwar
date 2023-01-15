@@ -7,7 +7,8 @@
                 "imports": {
                     "three": "/three/src/Three.js",
                     "PointerLockControls": "/three/examples/jsm/controls/PointerLockControls.js",
-                    "GLTFLoader": "/three/examples/jsm/loaders/GLTFLoader.js"
+                    "GLTFLoader": "/three/examples/jsm/loaders/GLTFLoader.js",
+                    "CSS2D": "/three/examples/jsm/renderers/CSS2DRenderer.js"
                 }
             }
         </script>
@@ -15,6 +16,10 @@
     </head>
     <body>
         <canvas id="bg"></canvas>
+        <p id="healthDisplay">100</p>
+        <div id="healthBarContainer">
+            <div id="healthBar"></div>
+        </div>
         <div id="menue">
             <button id="playButton">PLAY</button>
         </div>

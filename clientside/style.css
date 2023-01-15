@@ -16,6 +16,7 @@ body {
 
 
 #menue {
+    z-index: 10;
     padding-top: 350px;
 }
 
@@ -40,3 +41,28 @@ body {
     outline: none;
 }
 
+
+#healthDisplay {
+    position: absolute;
+    left: 70px;
+    bottom: 20px;
+}
+
+
+#healthBarContainer {
+    position: absolute;
+    left: 120px;
+    bottom: 30px;
+    width: 100px;
+    height: 30px;
+    border-style: solid;
+    border-color: black;
+
+}
+
+
+#healthBar {
+    width: 100%;
+    height: 100%;
+    background-color: red;    
+}

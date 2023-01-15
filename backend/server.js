@@ -79,6 +79,11 @@ function rayChecker(startVec, dirVec, near, far) {
   const intersects = raycaster.intersectObjects(scene.children);
 
   if (intersects.length > 0) {
+    if (intersects[0].object.name.indexOf("player") >= 0) {
+      let playerId = intersects[0].object.name.substring(10);
+      console.log(playerId);
+      sendAll({header: "playerHit", data: {playerId: playerId, damage: 10}});
+    }
     console.log(intersects[0].object.name);
   }
 }
@@ -163,18 +168,16 @@ wss.on('connection', (ws) => {
       //ein spieler hat sich bewegt, neue position wird gespeichert und an den anderen spieler mitgeteilt
       //später muss hier noch anti cheat überprüfung rein.
       myclient.position = message.data.position;
-      myclient.rotation = message.data.rotation;
-      sendAll({header: "walkevent", data: {id: id, rotation: message.data.rotation, position: message.data.position, isGrounded: message.data.isGrounded}});
+      sendAll({header: "walkevent", data: {id: id, position: message.data.position, isGrounded: message.data.isGrounded}});
       moveObject(clientList[clients.get(id)].model, message.data.position);
 
     } else if (message.header == "rotateevent") {
       //ein spieler hat sich gedreht, den anderen wird das nun mitgeteilt
       myclient.rotation = message.data.rotation;
-      sendAll({header: "rotateevent", data: {id: id, rotation: message.data.rotation}});
+      sendAll({header: "rotateevent", data: {playerId: id, rotation: message.data.rotation}});
 
     } else if (message.header == "attacking") {
-      //console.log(message.data.position);
-      //console.log(message);
+      //spieler schiesst irgendwo hin
       let startVec = new THREE.Vector3(message.data.position[0], message.data.position[1], message.data.position[2]);
       let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
       rayChecker(startVec, dirVec, 0.01, 30);

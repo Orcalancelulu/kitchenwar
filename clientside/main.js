@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import {PointerLockControls} from "PointerLockControls"
 import { GLTFLoader } from 'GLTFLoader';
 
+
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 20);
 let renderer;
 
 let mapSize = 120; //mit einer mapSize von 120 * 120 und einer Chunkgrösse von 4*4 gibt es 30*30 Chunks --> 900 Chunks insgesamt
@@ -70,6 +71,7 @@ function player (id, position, model, rotation, walkVector) {
   this.isGrounded = false;
   this.downVel = 0;
   this.isWalking = false;
+  this.hp = 100; 
 }
 
 const createSkybox = async () => {
@@ -88,10 +90,8 @@ const addGltfToScene = () => {
     moveObject(gltf.scene, [2, 0.5, 2]);
     scene.add(gltf.scene);
 
-    console.log(gltf);
     mixer = new THREE.AnimationMixer(gltf.scene);
     let action = mixer.clipAction(gltf.animations[0]);
-    console.log(action);
 
     action.play();
 
@@ -119,7 +119,7 @@ const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   playerObj.position.add(new THREE.Vector3(lookVector.x * moveSpeed * vector[0] +lookVector.z * moveSpeed * vector[1], 0, lookVector.z * moveSpeed* vector[0] + -lookVector.x * moveSpeed* vector[1]));
   
   playerList[index].position = [playerObj.position.x, playerObj.position.y, playerObj.position.z];
-
+  
   if (!ownPlayer) return;
 
   //own player is moving
@@ -128,7 +128,7 @@ const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
 
   isMoving = true;
   moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
-  ws.send(JSON.stringify({header: "walkevent", data: {rotation: [playerObj.quaternion.x, playerObj.quaternion.y, playerObj.quaternion.z, playerObj.quaternion.w], walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z], isGrounded: playerList[index].isGrounded}}))
+  ws.send(JSON.stringify({header: "walkevent", data: {walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z], isGrounded: playerList[index].isGrounded}}))
 }
 
 const checkPlayerCollision = (afterMove) => {
@@ -178,6 +178,7 @@ const checkPlayerCollision = (afterMove) => {
 }
 
 const createPlayerModel = (pos) => {
+  
   const geometry = new THREE.BoxGeometry(...playerSize);
   const material = new THREE.MeshStandardMaterial( {color: 0xFFFFFF} );
   const cube = new THREE.Mesh( geometry, material );
@@ -188,13 +189,40 @@ const createPlayerModel = (pos) => {
   return cube;
 }
 
-const createPlayer = (pos, id, myPlayer) => {
+const loadBetterModel = (playerId, pos, myPlayer, rotation) => {
+  
+  const loader = new GLTFLoader();
+  loader.load("models/wasserkocher/wasserkocher.glb", function ( gltf ) {
+    gltf.scene.scale.set(0.2, 0.2, 0.2);
+    scene.add(gltf.scene);
+    
+    moveObject(gltf.scene, pos);
+    
+    scene.remove(playerList[playerIdToIndex.get(playerId)].model);
+    playerList[playerIdToIndex.get(playerId)].model = gltf.scene;
+    
+    if (myPlayer) {
+      createCameraControl(rotation); //createCameraControl ist hier und nicht in der Nachrichtsankunft, da der loader ziemlich viel Zeit braucht. createCameraControl braucht aber das zeugs vom loader 
+    }
+  })
+
+
+}
+
+const createPlayer = (pos, id, myPlayer, rotation) => {
   let index = playerList.length;
   if (playerIdToIndex.get(id) != undefined) return;
   if (myPlayer) index = 0;
 
   playerIdToIndex.set(id, index);
   playerList[index] = new player(id, pos, createPlayerModel(pos));
+  console.log("loading model");
+  loadBetterModel(id, pos, myPlayer, rotation); //loads the real model, takes longer so a dummy model gets loaded first for movement (only few millisec)
+
+  if (!myPlayer) {
+    playerList[index].hpModel = createFloatingHp(id);
+  }
+
 }
 
 const updateAnimations = () => {
@@ -258,7 +286,6 @@ const createCameraControl = (rot) => {
   controls = new PointerLockControls( camera, document.body, playerList[0].model, function(quat) {
 
     //falls man läuft wird die rotation eh schon geschickt, braucht es nicht zwei mal
-    if (isMoving) return;
     ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
   });
   moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
@@ -331,11 +358,14 @@ const applyPhysics = () => {
 
 }
 
+
+
 const animate = () => {
   requestAnimationFrame(animate);
   checkInput();
   applyPhysics();
   updateAnimations();
+ 
   renderer.render(scene, camera);
 };
 
@@ -351,6 +381,7 @@ const createScene = (el) => {
   renderer = new THREE.WebGLRenderer({canvas: el});
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
 
   generateMap(mapData);
   resize();
@@ -410,6 +441,59 @@ const moveObject = (object, position) => {
   object.position.z = position[2];
 
 };
+
+const damagePlayer = (playerId, damage) => {
+  playerList[playerIdToIndex.get(playerId)].hp -= damage;
+  if (playerList[playerIdToIndex.get(playerId)].hp < 0) {
+    //player died
+    return;
+  }
+  if (playerIdToIndex.get(playerId) == 0) {
+    //own player got hit
+    console.log(playerList[0].hp);
+    updateOwnHp();
+  } else {
+    //some other player got hit
+    console.log("someone got hit");
+    updateFloatingHp(playerList[playerIdToIndex.get(playerId)].hp, playerId);
+  }
+  if (playerList[playerIdToIndex.get(playerId)].hp < 0) {
+    //player died
+
+  }
+  
+}
+
+const createFloatingHp = (playerId) => {
+
+  let playerObject = playerList[playerIdToIndex.get(playerId)];
+
+  const map = new THREE.TextureLoader().load( '/texture/hpBar.png' );
+  const material = new THREE.SpriteMaterial( { map: map } );
+
+  const sprite = new THREE.Sprite( material );
+
+  sprite.scale.set(0.5, 0.1, 0.1)
+  sprite.position.set(0, 0.7, 0);
+
+  playerObject.model.add(sprite);
+  return sprite;
+
+}
+
+const updateFloatingHp = (hp, playerId) => {  
+
+  const hpRatio = hp / 100; //100 = maxHp, wird später noch geändert, soll nicht hardgecoded sein
+
+  playerList[playerIdToIndex.get(playerId)].hpModel.scale.set(hpRatio * 0.5, 0.1, 1);
+
+}
+
+const updateOwnHp = () => {
+  const maxHp = 100;
+  document.getElementById("healthBar").style.width = (100*(playerList[0].hp / maxHp)).toString() + "%";
+  document.getElementById("healthDisplay").innerHTML = playerList[0].hp;
+}
 
 const createObject = (object) => {
   if (object.shape == "cube") {
@@ -528,15 +612,13 @@ ws.onmessage = (event) => {
     movedPlayer.isWalking = true;
     movedPlayer.isGrounded = message.data.isGrounded;
 
-    let quaternion = new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]);
-    movedPlayer.model.setRotationFromQuaternion(quaternion);
-
     moveObject(playerList[index].model, message.data.position)
     playerList[index].position = message.data.position;
 
   } else if(message.header == "rotateevent") {
-    playerList[playerIdToIndex.get(message.data.id)].rotation = message.data.rotation;
-    playerList[playerIdToIndex.get(message.data.id)].model.setRotationFromQuaternion(new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]));
+    if (playerIdToIndex.get(message.data.playerId) == 0) return;
+    playerList[playerIdToIndex.get(message.data.playerId)].rotation = message.data.rotation;
+    playerList[playerIdToIndex.get(message.data.playerId)].model.setRotationFromQuaternion(new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]));
 
   }else if(message.header == "mapData") {
     //als erstes schickt der server die map daten, damit die Map generiert werden kann. 
@@ -546,8 +628,7 @@ ws.onmessage = (event) => {
   } else if(message.header == "yourPos") {
     //server schickt die eigene position zum spawnen
     playerList = [];
-    createPlayer(message.data.position, message.data.playerId, true);
-    createCameraControl(message.data.rotation);
+    createPlayer(message.data.position, message.data.playerId, true, message.data.rotation);
 
   } else if(message.header == "newPlayer") {
     //falls ein neuer spieler connected, muss dieser erstellt werden
@@ -558,5 +639,8 @@ ws.onmessage = (event) => {
     //falls jemand disconnected, muss dieser spieler auch verschwinden
     console.log("player disconnected: " + message.data.playerId);
     removePlayer(message.data.playerId);
+  } else if (message.header == "playerHit") {
+    console.log("player: " + message.data.playerId + " recieved " + message.data.damage + " damage");
+    damagePlayer(message.data.playerId, message.data.damage);
   }
 }
