@@ -203,6 +203,8 @@ const loadBetterModel = (playerId, pos, myPlayer, rotation) => {
     
     if (myPlayer) {
       createCameraControl(rotation); //createCameraControl ist hier und nicht in der Nachrichtsankunft, da der loader ziemlich viel Zeit braucht. createCameraControl braucht aber das zeugs vom loader 
+      gltf.scene.visible = false;
+      console.log(gltf.scene.visible);
     }
   })
 
@@ -221,7 +223,7 @@ const createPlayer = (pos, id, myPlayer, rotation) => {
 
   if (!myPlayer) {
     playerList[index].hpModel = createFloatingHp(id);
-  }
+  } 
 
 }
 
