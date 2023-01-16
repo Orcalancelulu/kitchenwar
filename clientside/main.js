@@ -594,7 +594,7 @@ addGltfToScene();
 
 start of websocket code*/
 
-const ws = new WebSocket("ws://localhost:7071");
+const ws = new WebSocket("ws://localhost:7031");
 
 ws.onopen = function(event) {
   console.log("ws is open!");

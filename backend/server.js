@@ -1,7 +1,7 @@
 const { Mesh } = require("three");
 const THREE = require("three");
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 7071 });
+const wss = new WebSocket.Server({ port: 7031 });
 
 let clientList = [];
 const scene = new THREE.Scene();
