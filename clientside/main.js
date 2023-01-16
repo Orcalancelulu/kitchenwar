@@ -108,6 +108,8 @@ const addGltfToScene = () => {
 }
 
 const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
+  //if (!playerList[0].isGrounded) return;
+
   let index = playerIdToIndex.get(playerId);
   if (index == undefined) index = 0;
 
@@ -204,7 +206,10 @@ const loadBetterModel = (playerId, pos, myPlayer, rotation) => {
     if (myPlayer) {
       createCameraControl(rotation); //createCameraControl ist hier und nicht in der Nachrichtsankunft, da der loader ziemlich viel Zeit braucht. createCameraControl braucht aber das zeugs vom loader 
       gltf.scene.visible = false;
+
       console.log(gltf.scene.visible);
+    } else {
+      playerList[playerIdToIndex.get(playerId)].hpModel = createFloatingHp(playerId);
     }
   })
 
@@ -221,9 +226,7 @@ const createPlayer = (pos, id, myPlayer, rotation) => {
   console.log("loading model");
   loadBetterModel(id, pos, myPlayer, rotation); //loads the real model, takes longer so a dummy model gets loaded first for movement (only few millisec)
 
-  if (!myPlayer) {
-    playerList[index].hpModel = createFloatingHp(id);
-  } 
+ 
 
 }
 
@@ -261,7 +264,7 @@ const getBoxBounds = (position, dimensions) => {
 
 const removePlayer = (id) => {
   console.log("removed player");
-
+  
   let index = playerIdToIndex.get(id);
   scene.remove(playerList[index].model);
   playerIdToIndex.delete(id);
@@ -476,7 +479,7 @@ const createFloatingHp = (playerId) => {
   const sprite = new THREE.Sprite( material );
 
   sprite.scale.set(0.5, 0.1, 0.1)
-  sprite.position.set(0, 0.7, 0);
+  sprite.position.set(0, 2, 0);
 
   playerObject.model.add(sprite);
   return sprite;
