@@ -478,8 +478,8 @@ const createFloatingHp = (playerId) => {
 
   const sprite = new THREE.Sprite( material );
 
-  sprite.scale.set(0.5, 0.1, 0.1)
-  sprite.position.set(0, 2, 0);
+  sprite.scale.set(1.5, 0.3, 1)
+  sprite.position.set(0, 4, 0);
 
   playerObject.model.add(sprite);
   return sprite;
@@ -490,7 +490,7 @@ const updateFloatingHp = (hp, playerId) => {
 
   const hpRatio = hp / 100; //100 = maxHp, wird später noch geändert, soll nicht hardgecoded sein
 
-  playerList[playerIdToIndex.get(playerId)].hpModel.scale.set(hpRatio * 0.5, 0.1, 1);
+  playerList[playerIdToIndex.get(playerId)].hpModel.scale.set(hpRatio * 1.5, 0.3, 1);
 
 }
 
