@@ -1,4 +1,3 @@
-const { Mesh } = require("three");
 const THREE = require("three");
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ port: 7031 });
@@ -12,12 +11,17 @@ const clients = new Map();
 const raycaster = new THREE.Raycaster();
 
 //zum debuggen mal hardcoded. später soll es noch aus einem file kommen
-let spawnPos = [1, 15, 1];
+let menueSpawnPos = [-40, 5, -40];
+
 
 let playerSize = [0.25, 1, 0.25];
 
 let mapObject = {
-  skybox: 0x00FFFF,
+  possibleSpawnPos: [[2, 0, 2], [5, 0, 5], [0, 3, 0]],
+  cameraFly: {
+    bezier: [[0, 5, 0], [10, 5, 0], [0, 5, 10], [10, 5, 10], [3, 10, 0]], 
+    lookVector: [2, -10, 2]
+  },  
   groundColor: 0xFFFFFF,
   objects: {
     cube778828: { //random id nummer
@@ -81,10 +85,18 @@ function rayChecker(startVec, dirVec, near, far) {
   if (intersects.length > 0) {
     if (intersects[0].object.name.indexOf("player") >= 0) {
       let playerId = intersects[0].object.name.substring(10);
-      console.log(playerId);
-      sendAll({header: "playerHit", data: {playerId: playerId, damage: 10}});
+      if (!clientList[clients.get(playerId)].isInGame) return; //falls spieler per zufall per luftlinie auf spielerhaufen in standby schiesst, dann bitte kein schaden
+
+      let damage = 10; //debugging, später noch anders
+      clientList[clients.get(playerId)].hp -= damage;
+      if (clientList[clients.get(playerId)].hp <= 0) {
+        console.log("player: " + playerId + " died");
+        sendAll({header: "putToStandby", data: {cause: "death", playerId: playerId}});
+        clientList[clients.get(playerId)].isInGame = false;
+      }
+
+      sendAll({header: "playerHit", data: {playerId: playerId, damage: damage}});
     }
-    console.log(intersects[0].object.name);
   }
 }
 
@@ -100,6 +112,7 @@ function client(id, ws, position, model, rotation, hp) {
   this.rotation = rotation;
   this.hp = hp;
   this.model = model
+  this.isInGame = false;
 }
 
 //check if message from client is JSON data
@@ -128,30 +141,67 @@ function sendTo(messageToSend, clientToReceive) {
   clientToReceive.send(JSON.stringify(messageToSend));
 }
 
+function getDistanceBetweenArrayVector(arr1, arr2) {
+  let diffArr = [];
+  diffArr[0] = arr1[0]-arr2[0];
+  diffArr[1] = arr1[1]-arr2[1];
+  diffArr[2] = arr1[2]-arr2[2];
+
+  let distance = Math.sqrt(diffArr[0]*diffArr[0] + diffArr[1]*diffArr[1] + diffArr[2]*diffArr[2]);
+  return distance;
+}
+
+function getSpawnPos() { //calculates spawn pos farthest away from any player
+  let minDistance = {distance: 1000}
+  let distanceToSpawn = {distance: 0, pos: [0, 0, 0]}
+
+  mapObject.possibleSpawnPos.forEach((pos) => {
+    console.log(pos);
+    minDistance.distance = 1000;
+    clientList.forEach((player) => {
+      if (player.isInGame) {
+        let currentDistance = getDistanceBetweenArrayVector(player.position, pos)
+        console.log(currentDistance);
+        if (currentDistance < minDistance.distance) {
+          minDistance.distance = currentDistance;
+        }
+      }
+    });
+    if (minDistance.distance >= distanceToSpawn.distance) { //"=" damit default wert überschrieben wird, falls alle auf spawn sitzen bleiben
+      distanceToSpawn.distance = minDistance.distance;
+      distanceToSpawn.pos = pos;
+    }
+  });
+  return distanceToSpawn.pos;
+}
+
 createScene();
 
 wss.on('connection', (ws) => {
   //chancen, dass es zwei gleiche uuidv4 gibt, sind ziemlich gering
   const id = uuidv4();
+ 
+  //sendet dem Client die Map Daten
+  sendTo({header: "mapData", mapObject}, ws);
+  sendTo({header: "yourPos", data: {position: menueSpawnPos, rotation: [0, 0, 0, 1], playerId: id, hp: 100}}, ws)
+
+  //sendet dem neu gespawnten Spieler alle positionen und rotationen der Spieler
+  clientList.forEach((player) => {
+    sendTo({header: "newPlayer", data: {position: player.position, rotation: player.rotation, playerId: player.id, hp: player.hp}}, ws);
+    sendTo({header: "playerJoined", data: {position: player.position, playerId: player.id}}, ws);
+
+  })
+
+  //Den anderen Spielern wird mitgeteilt, dass ein neuer Spieler dabei ist
+  console.log("id " + id  + " connected");
+  sendAll({header: "newPlayer", data: {position: menueSpawnPos, rotation: 0, playerId: id, hp: 100}});
 
   //erstellt nachschlagetabelle, um herauszufinden, bei welchem index in clientList die Daten für eine id sind. 
   clients.set(id, clientList.length);
 
   //speichert infos, wie position, hp, usw. pro spieler
-  clientList.push(new client(id, ws, spawnPos, createBasicObject({size: playerSize, position: spawnPos, id: "player" + id}, true)));
+  clientList.push(new client(id, ws, menueSpawnPos, createBasicObject({size: playerSize, position: menueSpawnPos, id: "player" + id}, true)));
 
-  //sendet dem Client die Map Daten
-  sendTo({header: "mapData", mapObject}, ws);
-  sendTo({header: "yourPos", data: {position: spawnPos, rotation: [0, 0, 0, 1], playerId: id}}, ws)
-
-  //sendet dem neu gespawnten Spieler alle positionen und rotationen der Spieler
-  clientList.forEach((player) => {
-    sendTo({header: "newPlayer", data: {position: player.position, rotation: player.rotation, playerId: player.id}}, ws)
-  })
-
-  //Den anderen Spielern wird mitgeteilt, dass ein neuer Spieler dabei ist
-  console.log("id " + clients.get(id) + " connected");
-  sendAll({header: "newPlayer", data: {position: spawnPos, rotation: 0, playerId: id}});
 
   
 
@@ -182,9 +232,15 @@ wss.on('connection', (ws) => {
       let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
       rayChecker(startVec, dirVec, 0.01, 30);
 
-    } else if (message.header == "joiningMatch") {
+    } else if (message.header == "joiningGame") {
       //spieler war vorher noch im menü, jetzt aber im game mit charakter
-      
+
+      let pos = getSpawnPos();
+
+      clientList[clients.get(id)].isInGame = true;
+
+      console.log(pos);
+      sendAll({header: "playerJoined", data: {position: pos, playerId: id}})
     }
   });
 

@@ -3,6 +3,7 @@ import {PointerLockControls} from "PointerLockControls"
 import { GLTFLoader } from 'GLTFLoader';
 
 
+
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 20);
 let renderer;
@@ -21,15 +22,16 @@ let isKeyPressed = {keyCodes: {}}
 let keyMapList = {"KeyW": {exfunc: () => movePlayer([-1, 0], playerList[0].model, true)}, "KeyS": {exfunc: () => movePlayer([1, 0], playerList[0].model, true)}, "KeyA": {exfunc: () => movePlayer([0, -1], playerList[0].model, true)}, "KeyD": {exfunc: () => movePlayer([0, 1], playerList[0].model, true)}, "Space": {exfunc: () => wantToJump()}};
 let moveSpeed = 0.1;
 
-let isMoving = false;
-
 let playerSize = [0.25, 1, 0.25];
 
 let mixer;
-let areControlsLocked = false;
 
 let controls;
+let isInGame = false;
 
+let standByPos = [1, 20, 1];
+
+let isMoving = false;
 
 
 //erste 3 Zahlen für bounds, nächste 3 für playerPosition, nächste für extra abstand, damit man im nächsten frame nicht schon wieder drinn steckt und die letzte ziffer, damit man zurück zum rand des objekts kommt
@@ -46,6 +48,7 @@ let whereToMoveAtCollision = {
 //anfang debugging
 
 document.body.addEventListener("click", (event)=> {
+  if (!isInGame) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
   let lookVector = new THREE.Vector3;
   camera.getWorldDirection(lookVector);
   ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
@@ -58,7 +61,7 @@ let dilight = new THREE.DirectionalLight(0xFFFFFF, 1);
 scene.add(amlight, dilight);
 //ende debugging
 
-function player (id, position, model, rotation, walkVector) {
+function player (id, position, model, hp, rotation, walkVector) {
   //nickname, model und position müssen gegeben werden, damit ein Player erstellt werden kann
   if (rotation == undefined) rotation = 0 //noch ändern #hilfe
   if (walkVector == undefined) walkVector = [0, 0] //erste Ziffer = vorne / hinten, zweite Ziffer = links / rechts
@@ -71,7 +74,8 @@ function player (id, position, model, rotation, walkVector) {
   this.isGrounded = false;
   this.downVel = 0;
   this.isWalking = false;
-  this.hp = 100; 
+  this.hp = hp; 
+  this.isOnStandby = true;
 }
 
 const createSkybox = async () => {
@@ -143,6 +147,7 @@ const checkPlayerCollision = (afterMove) => {
   if (afterMove[1]-playerSize[1]*0.5 <= 0) {
     playerList[0].isGrounded = true;
     playerList[0].model.position.y = playerSize[1]*0.5;
+    camera.position.y = playerList[0].model.position.y + playerSize[1]*0.25;
     //console.log("standing");
   }
 
@@ -197,36 +202,33 @@ const loadBetterModel = (playerId, pos, myPlayer, rotation) => {
   loader.load("models/wasserkocher/wasserkocher.glb", function ( gltf ) {
     gltf.scene.scale.set(0.2, 0.2, 0.2);
     scene.add(gltf.scene);
+
     
     moveObject(gltf.scene, pos);
+    
     
     scene.remove(playerList[playerIdToIndex.get(playerId)].model);
     playerList[playerIdToIndex.get(playerId)].model = gltf.scene;
     
     if (myPlayer) {
       createCameraControl(rotation); //createCameraControl ist hier und nicht in der Nachrichtsankunft, da der loader ziemlich viel Zeit braucht. createCameraControl braucht aber das zeugs vom loader 
-      gltf.scene.visible = false;
-
-      console.log(gltf.scene.visible);
-    } else {
-      playerList[playerIdToIndex.get(playerId)].hpModel = createFloatingHp(playerId);
     }
+    playerList[playerIdToIndex.get(playerId)].hpModel = createFloatingHp(playerId);
   })
 
 
 }
 
-const createPlayer = (pos, id, myPlayer, rotation) => {
+const createPlayer = (pos, id, hp, myPlayer, rotation) => {
   let index = playerList.length;
   if (playerIdToIndex.get(id) != undefined) return;
   if (myPlayer) index = 0;
 
-  playerIdToIndex.set(id, index);
-  playerList[index] = new player(id, pos, createPlayerModel(pos));
-  console.log("loading model");
-  loadBetterModel(id, pos, myPlayer, rotation); //loads the real model, takes longer so a dummy model gets loaded first for movement (only few millisec)
 
- 
+  playerIdToIndex.set(id, index);
+  playerList[index] = new player(id, pos, createPlayerModel(pos), hp);
+  loadBetterModel(id, pos, myPlayer, rotation); //loads the real model, takes longer so a dummy model gets loaded first for movement (only few millisec)
+  console.log("loading model");
 
 }
 
@@ -289,22 +291,32 @@ const createCameraControl = (rot) => {
   playerList[0].model.setRotationFromQuaternion(quaternion);
 
   controls = new PointerLockControls( camera, document.body, playerList[0].model, function(quat) {
+    //rotation an server schicken
 
-    //falls man läuft wird die rotation eh schon geschickt, braucht es nicht zwei mal
     ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
   });
   moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
 
   document.getElementById("playButton").addEventListener( 'click', function () {
+    
     controls.lock();
   });
 
   controls.addEventListener('lock', function () {
     document.getElementById("menue").style.display = 'none';
+    isInGame = true;
+    camera.position.set(playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z);
+    camera.quaternion.copy(playerList[0].model.quaternion);
+    
+    if (playerList[0].isOnStandby) ws.send(JSON.stringify({header: "joiningGame"}));
+
+    playerList[0].model.visible = false;
   } );
 
   controls.addEventListener('unlock', function () {
     document.getElementById("menue").style.display = 'block';
+    isInGame = false;
+    playerList[0].model.visible = true;
   } );
 
   
@@ -342,10 +354,48 @@ const createGrid = () => {
   scene.add( gridHelper );
 };
 
+//falls jemand verreckt oder frisch joint
+const putToStandby = (playerId, isMyPlayer) => {
+  let index = playerIdToIndex.get(playerId);
+  playerList[index].model.visible = false
+  moveObject(playerList[index].model, standByPos);
+  playerList[index].isOnStandby = true;
+  playerList[index].hp = 100; //debugging, später  noch anpassbare maxHp
+
+
+  if (isMyPlayer) {
+    controls.unlock();
+  }
+}
+
+const putInGame = (playerId, isMyPlayer, spawnPos) => {
+  let index = playerIdToIndex.get(playerId);
+  //console.log(index);
+  //console.log(playerList[index]);
+  let playerObj = playerList[index];
+
+  moveObject(playerObj.model, spawnPos);
+  moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
+
+  //console.log("moving...")
+  playerList[index].isOnStandby = false;
+  playerList[index].hp = 100; //debugging, später  noch anpassbare maxHp
+  console.log(isMyPlayer);
+  if (isMyPlayer) {
+    updateOwnHp();
+    playerList[index].model.visible = false;
+  } else {
+    playerList[index].model.visible = true;
+  }
+
+  updateFloatingHp(playerList[index].hp, playerId);
+  
+}
+
 const applyPhysics = () => {
   //console.log(playerList[0].isGrounded);
   if (playerList[0] == undefined) return;
-  if (playerList[0].isGrounded) { 
+  if (playerList[0].isGrounded || !isInGame) { 
     playerList[0].downVel = 0; 
     return; 
   }
@@ -359,10 +409,47 @@ const applyPhysics = () => {
   moveObject(camera, [playerList[0].position[0], playerList[0].position[1]+playerSize[1]*0.25, playerList[0].position[2]]);
 
   ws.send(JSON.stringify({header: "walkevent", data: {position: playerList[0].position, rotation: [playerList[0].model.quaternion.x, playerList[0].model.quaternion.y, playerList[0].model.quaternion.z, playerList[0].model.quaternion.w], isGrounded: false}}))
-  //console.log(playerList[0].position);
-
 }
 
+//rekursive Funktion um Bezierkurve (3d) zu bekommen anhand von den Leitpunkten und faktor (wo genau auf der Kurve man den Punkt will)
+const bezierPos = (vectorList, factor) => {
+  let afterVectorList = [];
+  for (var i = 0; i<vectorList.length-1; i++) {
+    afterVectorList[i] = vectorList[i].lerp(vectorList[i+1], factor);
+  }
+  if (afterVectorList.length < 2) {
+    return afterVectorList[0];
+  } else {
+    return bezierPos(afterVectorList, factor);
+  }
+}
+
+//debugging
+let flyTime = 0; //muss später noch durch deltaTime ersetzt werden
+//ende debugging
+
+
+const updateCameraFly = () => {
+  if (isInGame) return; //only if not in game
+
+  let rawPosList = mapData.cameraFly.bezier;
+  let posList = [];
+  let index = 0;
+
+  rawPosList.forEach((pos) => {
+    posList[index] = new THREE.Vector3(pos[0], pos[1], pos[2]);
+    index += 1;
+  });
+
+  let positionToMove = bezierPos(posList, flyTime);
+  camera.position.set(positionToMove.x, positionToMove.y, positionToMove.z);
+  camera.lookAt(new THREE.Vector3(mapData.cameraFly.lookVector[0], mapData.cameraFly.lookVector[1], mapData.cameraFly.lookVector[2]));
+  flyTime +=  0.001;
+  if (flyTime > 1) {
+    flyTime = 0;
+  }
+
+}
 
 
 const animate = () => {
@@ -370,6 +457,8 @@ const animate = () => {
   checkInput();
   applyPhysics();
   updateAnimations();
+
+  updateCameraFly();
  
   renderer.render(scene, camera);
 };
@@ -383,7 +472,7 @@ const resize = () => {
 };
 
 const createScene = (el) => {
-  renderer = new THREE.WebGLRenderer({canvas: el});
+  renderer = new THREE.WebGLRenderer({canvas: el, antialias: true});
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -448,18 +537,20 @@ const moveObject = (object, position) => {
 };
 
 const damagePlayer = (playerId, damage) => {
+  console.log(playerList[playerIdToIndex.get(playerId)].hp);
+  
   playerList[playerIdToIndex.get(playerId)].hp -= damage;
-  if (playerList[playerIdToIndex.get(playerId)].hp < 0) {
+  if (playerList[playerIdToIndex.get(playerId)].hp <= 0) {
     //player died
     return;
   }
   if (playerIdToIndex.get(playerId) == 0) {
     //own player got hit
     console.log(playerList[0].hp);
+    updateFloatingHp(playerList[playerIdToIndex.get(playerId)].hp, playerId);
     updateOwnHp();
   } else {
     //some other player got hit
-    console.log("someone got hit");
     updateFloatingHp(playerList[playerIdToIndex.get(playerId)].hp, playerId);
   }
   if (playerList[playerIdToIndex.get(playerId)].hp < 0) {
@@ -478,7 +569,11 @@ const createFloatingHp = (playerId) => {
 
   const sprite = new THREE.Sprite( material );
 
-  sprite.scale.set(1.5, 0.3, 1)
+  let hp = playerList[playerIdToIndex.get(playerId)].hp;
+
+  let hpRatio = hp/100;
+
+  sprite.scale.set(hpRatio * 1.5, 0.3, 1);
   sprite.position.set(0, 4, 0);
 
   playerObject.model.add(sprite);
@@ -560,6 +655,7 @@ const createListener = () => {
 }
 
 const checkInput = () => {
+  if (!isInGame) return;
   Object.keys(isKeyPressed.keyCodes).forEach((keyId) => {
     let key = isKeyPressed.keyCodes[keyId]
     if(key) {
@@ -599,7 +695,7 @@ addGltfToScene();
 
 start of websocket code*/
 
-const ws = new WebSocket("wss://kitchenwar-backend.onrender.com/");
+const ws = new WebSocket("ws://localhost:7031");
 
 ws.onopen = function(event) {
   console.log("ws is open!");
@@ -621,31 +717,41 @@ ws.onmessage = (event) => {
     playerList[index].position = message.data.position;
 
   } else if(message.header == "rotateevent") {
-    if (playerIdToIndex.get(message.data.playerId) == 0) return;
+    if (playerIdToIndex.get(message.data.playerId) == 0) return; //der eigene charakter muss nicht vom server gedreht werden, sind eh eigene daten
+
     playerList[playerIdToIndex.get(message.data.playerId)].rotation = message.data.rotation;
     playerList[playerIdToIndex.get(message.data.playerId)].model.setRotationFromQuaternion(new THREE.Quaternion(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2], message.data.rotation[3]));
 
-  }else if(message.header == "mapData") {
+  }else if(message.header == "mapData") { //**************** */
     //als erstes schickt der server die map daten, damit die Map generiert werden kann. 
     mapData = message.mapObject;
     createScene(document.getElementById("bg"));
 
-  } else if(message.header == "yourPos") {
+  } else if(message.header == "yourPos") { //******************* */
     //server schickt die eigene position zum spawnen
     playerList = [];
-    createPlayer(message.data.position, message.data.playerId, true, message.data.rotation);
+    createPlayer(message.data.position, message.data.playerId, message.data.hp, true, message.data.rotation);
 
   } else if(message.header == "newPlayer") {
     //falls ein neuer spieler connected, muss dieser erstellt werden
     console.log("new player connected");
-    createPlayer(message.data.position, message.data.playerId, false);
+    createPlayer(message.data.position, message.data.playerId, message.data.hp, false);
 
   } else if (message.header == "playerDisconnected") {
     //falls jemand disconnected, muss dieser spieler auch verschwinden
     console.log("player disconnected: " + message.data.playerId);
     removePlayer(message.data.playerId);
+
   } else if (message.header == "playerHit") {
-    console.log("player: " + message.data.playerId + " recieved " + message.data.damage + " damage");
+    //console.log("player: " + message.data.playerId + " recieved " + message.data.damage + " damage");
     damagePlayer(message.data.playerId, message.data.damage);
+
+  } else if (message.header == "playerJoined") {
+    console.log("Player joined the game");
+    putInGame(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0, message.data.position);
+    
+  } else if (message.header == "putToStandby") {
+    console.log("Putting to standby because: " + message.data.cause);
+    putToStandby(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0);
   }
 }
