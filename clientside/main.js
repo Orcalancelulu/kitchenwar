@@ -695,7 +695,7 @@ addGltfToScene();
 
 start of websocket code*/
 
-const ws = new WebSocket("ws://localhost:7031");
+const ws = new WebSocket("wss://kitchenwar-backend.onrender.com");
 
 ws.onopen = function(event) {
   console.log("ws is open!");
