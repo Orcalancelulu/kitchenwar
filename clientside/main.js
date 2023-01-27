@@ -111,6 +111,7 @@ const addGltfToScene = () => {
 	})
 }
 
+
 const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   //if (!playerList[0].isGrounded) return;
 
@@ -654,10 +655,13 @@ const createListener = () => {
   })
 }
 
+
 const checkInput = () => {
   if (!isInGame) return;
+
+
   Object.keys(isKeyPressed.keyCodes).forEach((keyId) => {
-    let key = isKeyPressed.keyCodes[keyId]
+    let key = isKeyPressed.keyCodes[keyId];
     if(key) {
       if (keyMapList[keyId] != undefined)
       keyMapList[keyId].exfunc();

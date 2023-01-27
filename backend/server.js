@@ -254,7 +254,6 @@ wss.on('connection', (ws) => {
 
     console.log(id + " diconnected. " + clientList.length + " Players remaining");
 
-
   });
 });
 
