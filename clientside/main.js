@@ -19,8 +19,12 @@ let playerIdToIndex = new Map();
 let playerList = [];
 
 let isKeyPressed = {keyCodes: {}}
-let keyMapList = {"KeyW": {exfunc: () => movePlayer([-1, 0], playerList[0].model, true)}, "KeyS": {exfunc: () => movePlayer([1, 0], playerList[0].model, true)}, "KeyA": {exfunc: () => movePlayer([0, -1], playerList[0].model, true)}, "KeyD": {exfunc: () => movePlayer([0, 1], playerList[0].model, true)}, "Space": {exfunc: () => wantToJump()}};
-let moveSpeed = 0.1;
+
+let moveVector = [0, 0];
+let keyMapList = {"KeyW": {exfunc: () => moveVector[0] += -1}, "KeyS": {exfunc: () => moveVector[0] += 1}, "KeyA": {exfunc: () => moveVector[1] += -1}, "KeyD": {exfunc: () => moveVector[1] += 1}, "Space": {exfunc: () => wantToJump()}};
+
+const moveSpeed = 0.015;
+const dampFactor = 0.2;
 
 let playerSize = [0.25, 1, 0.25];
 
@@ -32,7 +36,6 @@ let isInMenu = true;
 
 let standByPos = [1, 20, 1];
 
-let isMoving = false;
 
 
 //erste 3 Zahlen für bounds, nächste 3 für playerPosition, nächste für extra abstand, damit man im nächsten frame nicht schon wieder drinn steckt und die letzte ziffer, damit man zurück zum rand des objekts kommt
@@ -73,7 +76,7 @@ function player (id, position, model, hp, rotation, walkVector) {
   this.walkVector = walkVector;
   this.model = model;
   this.isGrounded = false;
-  this.downVel = 0;
+  this.velocity = new THREE.Vector3(0, 0, 0);
   this.isWalking = false;
   this.hp = hp; 
   this.isOnStandby = true;
@@ -113,22 +116,26 @@ const addGltfToScene = () => {
 }
 
 
-const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
-  //if (!playerList[0].isGrounded) return;
+const movePlayer = (vector, playerObj) => {
 
-  let index = playerIdToIndex.get(playerId);
-  if (index == undefined) index = 0;
 
-  playerList[index].isWalking = true;
+  //used for future animations
+  playerList[0].isWalking = true;
+
 
   let lookVector = new THREE.Vector3();
   playerObj.getWorldDirection(lookVector);
 
+
+  playerList[0].velocity.add(new THREE.Vector3(lookVector.x * moveSpeed * vector[0] +lookVector.z * moveSpeed * vector[1], 0, lookVector.z * moveSpeed* vector[0] + -lookVector.x * moveSpeed* vector[1]));
+ 
+ // console.log(playerList[0].velocity);
+  //old stuff beginnign  *********************************************
+/*
   playerObj.position.add(new THREE.Vector3(lookVector.x * moveSpeed * vector[0] +lookVector.z * moveSpeed * vector[1], 0, lookVector.z * moveSpeed* vector[0] + -lookVector.x * moveSpeed* vector[1]));
   
-  playerList[index].position = [playerObj.position.x, playerObj.position.y, playerObj.position.z];
+  playerList[0].position = [playerObj.position.x, playerObj.position.y, playerObj.position.z];
   
-  if (!ownPlayer) return;
 
   //own player is moving
   let afterWalk = [playerObj.position.x, playerObj.position.y, playerObj.position.z];
@@ -138,9 +145,13 @@ const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
   moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
 
 
-  ws.send(JSON.stringify({header: "walkevent", data: {walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z], isGrounded: playerList[index].isGrounded}}))
+  ws.send(JSON.stringify({header: "walkevent", data: {walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z], isGrounded: playerList[0].isGrounded}}))
+  */
+  //old stuff end ****************************************************
 }
 
+
+//verstehe meinen code leider nicht mehr... viel glück!
 const checkPlayerCollision = (afterMove) => {
   let playerBounds = getBoxBounds(afterMove, playerSize);
 
@@ -178,7 +189,7 @@ const checkPlayerCollision = (afterMove) => {
         }
         let moveMap = whereToMoveAtCollision[index]
         bounds[index] +=  moveMap[6];
-        //let playerSize = [0.5, 2, 0.5];
+
         let newPos = [afterMove[0] * moveMap[3] + bounds[index] * moveMap[0] + playerSize[0] * 0.5 * moveMap[0] * moveMap[7], afterMove[1] * moveMap[4] + bounds[index] * moveMap[1] + playerSize[1] * 0.5 * moveMap[1] * moveMap[7], afterMove[2] * moveMap[5] + bounds[index] * moveMap[2] + playerSize[2] * 0.5 * moveMap[2] * moveMap[7]];
         
         playerList[0].position = newPos;
@@ -285,7 +296,7 @@ const wantToJump = () => {
   //console.log(playerList[0].isGrounded);
   if (!playerList[0].isGrounded) return;
   playerList[0].isGrounded = false;
-  playerList[0].downVel = 0.1;
+  playerList[0].velocity.add(new THREE.Vector3(0, 0.1, 0));
   playerList[0].model.position.y += 0.01;
 }
 
@@ -403,12 +414,17 @@ const applyPhysics = () => {
   //console.log(playerList[0].isGrounded);
   if (playerList[0] == undefined) return;
   if (playerList[0].isGrounded) { 
-    playerList[0].downVel = 0; 
-    return; 
+    playerList[0].velocity.y = 0;
   }
 
-  playerList[0].downVel -= 0.005;
-  playerList[0].model.position.add(new THREE.Vector3(0, playerList[0].downVel, 0));
+  if (playerList[0].velocity.dot > 0.001) return;
+
+  playerList[0].velocity.y -= 0.005; //gravity, später noch anders (debugging)
+
+  playerList[0].velocity.x += playerList[0].velocity.x * -dampFactor; //keine ahnung wie viel #debugging
+  playerList[0].velocity.z += playerList[0].velocity.z * -dampFactor; //keine ahnung wie viel #debugging
+
+  playerList[0].model.position.add(playerList[0].velocity); 
   playerList[0].position = [playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z];
 
   checkPlayerCollision(playerList[0].position);
@@ -648,7 +664,6 @@ const createListener = () => {
   })
   document.body.addEventListener("keyup", (event) => {
     isKeyPressed.keyCodes[event.code] = false;
-    isMoving = false;
   })
 }
 
@@ -664,6 +679,15 @@ const checkInput = () => {
       keyMapList[keyId].exfunc();
     }
   })
+
+  //nur bewegen falls man sich auch bewegen will
+  if (moveVector[0] == 0 && moveVector[1] == 0) return;
+
+  let normalizedMoveVector = new THREE.Vector2(moveVector[0], moveVector[1]).normalize();
+  movePlayer([normalizedMoveVector.x, normalizedMoveVector.y], playerList[0].model);
+
+
+  moveVector = [0, 0];
 }
 
 const recalcPlayerMap = () => {
