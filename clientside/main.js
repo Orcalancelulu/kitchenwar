@@ -28,6 +28,7 @@ let mixer;
 
 let controls;
 let isInGame = false;
+let isInMenu = true;
 
 let standByPos = [1, 20, 1];
 
@@ -48,7 +49,7 @@ let whereToMoveAtCollision = {
 //anfang debugging
 
 document.body.addEventListener("click", (event)=> {
-  if (!isInGame) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
+  if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
   let lookVector = new THREE.Vector3;
   camera.getWorldDirection(lookVector);
   ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
@@ -135,6 +136,8 @@ const movePlayer = (vector, playerObj, ownPlayer, playerId) => {
 
   isMoving = true;
   moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
+
+
   ws.send(JSON.stringify({header: "walkevent", data: {walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z], isGrounded: playerList[index].isGrounded}}))
 }
 
@@ -146,10 +149,12 @@ const checkPlayerCollision = (afterMove) => {
   playerList[0].isGrounded = false;
   //spieler landet auf dem Boden
   if (afterMove[1]-playerSize[1]*0.5 <= 0) {
+
     playerList[0].isGrounded = true;
+
     playerList[0].model.position.y = playerSize[1]*0.5;
-    camera.position.y = playerList[0].model.position.y + playerSize[1]*0.25;
-    //console.log("standing");
+    playerList[0].position[1] = playerSize[1]*0.5;
+
   }
 
   chunksToCheck.forEach((chunk) => {
@@ -169,7 +174,6 @@ const checkPlayerCollision = (afterMove) => {
         let smallestDis = Math.min(...disBounds);
         let index = disBounds.indexOf(smallestDis);
         if (index == 3) { //landed / standing on something
-          //console.log("standing");
           playerList[0].isGrounded = true;
         }
         let moveMap = whereToMoveAtCollision[index]
@@ -306,6 +310,7 @@ const createCameraControl = (rot) => {
   controls.addEventListener('lock', function () {
     document.getElementById("menue").style.display = 'none';
     isInGame = true;
+    isInMenu = false;
     camera.position.set(playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z);
     camera.quaternion.copy(playerList[0].model.quaternion);
     
@@ -316,8 +321,8 @@ const createCameraControl = (rot) => {
 
   controls.addEventListener('unlock', function () {
     document.getElementById("menue").style.display = 'block';
-    isInGame = false;
-    playerList[0].model.visible = true;
+    isInMenu = true;
+    //playerList[0].model.visible = true;
   } );
 
   
@@ -355,7 +360,7 @@ const createGrid = () => {
   scene.add( gridHelper );
 };
 
-//falls jemand verreckt oder frisch joint
+//falls jemand stirbt oder frisch joint
 const putToStandby = (playerId, isMyPlayer) => {
   let index = playerIdToIndex.get(playerId);
   playerList[index].model.visible = false
@@ -366,6 +371,7 @@ const putToStandby = (playerId, isMyPlayer) => {
 
   if (isMyPlayer) {
     controls.unlock();
+    isInGame = false;
   }
 }
 
@@ -381,7 +387,7 @@ const putInGame = (playerId, isMyPlayer, spawnPos) => {
   //console.log("moving...")
   playerList[index].isOnStandby = false;
   playerList[index].hp = 100; //debugging, später  noch anpassbare maxHp
-  console.log(isMyPlayer);
+  //console.log(isMyPlayer);
   if (isMyPlayer) {
     updateOwnHp();
     playerList[index].model.visible = false;
@@ -396,7 +402,7 @@ const putInGame = (playerId, isMyPlayer, spawnPos) => {
 const applyPhysics = () => {
   //console.log(playerList[0].isGrounded);
   if (playerList[0] == undefined) return;
-  if (playerList[0].isGrounded || !isInGame) { 
+  if (playerList[0].isGrounded) { 
     playerList[0].downVel = 0; 
     return; 
   }
@@ -537,28 +543,19 @@ const moveObject = (object, position) => {
 
 };
 
-const damagePlayer = (playerId, damage) => {
-  console.log(playerList[playerIdToIndex.get(playerId)].hp);
+const updateHealth = (playerId, damage) => {
   
   playerList[playerIdToIndex.get(playerId)].hp -= damage;
-  if (playerList[playerIdToIndex.get(playerId)].hp <= 0) {
-    //player died
-    return;
-  }
+  
   if (playerIdToIndex.get(playerId) == 0) {
     //own player got hit
-    console.log(playerList[0].hp);
-    updateFloatingHp(playerList[playerIdToIndex.get(playerId)].hp, playerId);
-    updateOwnHp();
-  } else {
-    //some other player got hit
-    updateFloatingHp(playerList[playerIdToIndex.get(playerId)].hp, playerId);
-  }
-  if (playerList[playerIdToIndex.get(playerId)].hp < 0) {
-    //player died
+    updateOwnHp(); //ui healthbar
+  } 
 
-  }
-  
+  updateFloatingHp(playerList[playerIdToIndex.get(playerId)].hp, playerId); //ingame healthbar
+
+  console.log(playerList[playerIdToIndex.get(playerId)].hp);
+
 }
 
 const createFloatingHp = (playerId) => {
@@ -657,7 +654,7 @@ const createListener = () => {
 
 
 const checkInput = () => {
-  if (!isInGame) return;
+  if (!isInGame || isInMenu) return;
 
 
   Object.keys(isKeyPressed.keyCodes).forEach((keyId) => {
@@ -699,7 +696,7 @@ addGltfToScene();
 
 start of websocket code*/
 
-const ws = new WebSocket("wss://kitchenwar-backend.onrender.com");
+const ws = new WebSocket("ws://localhost:7031"); //wss://kitchenwar-backend.onrender.com
 
 ws.onopen = function(event) {
   console.log("ws is open!");
@@ -748,7 +745,8 @@ ws.onmessage = (event) => {
 
   } else if (message.header == "playerHit") {
     //console.log("player: " + message.data.playerId + " recieved " + message.data.damage + " damage");
-    damagePlayer(message.data.playerId, message.data.damage);
+    updateHealth(message.data.playerId, message.data.damage);
+
 
   } else if (message.header == "playerJoined") {
     console.log("Player joined the game");

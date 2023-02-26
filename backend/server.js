@@ -79,6 +79,7 @@ function createScene() {
 }
 
 function rayChecker(startVec, dirVec, near, far) {
+
   raycaster.set(startVec, dirVec, near, far);
   const intersects = raycaster.intersectObjects(scene.children);
 
@@ -93,9 +94,16 @@ function rayChecker(startVec, dirVec, near, far) {
         console.log("player: " + playerId + " died");
         sendAll({header: "putToStandby", data: {cause: "death", playerId: playerId}});
         clientList[clients.get(playerId)].isInGame = false;
+        clientList[clients.get(playerId)].hp = 100; //debugging, später noch anders
+
+        //aus dem Weg mit dem Spieler, damit er nicht Schüsse blockiert und so
+        clientList[clients.get(playerId)].position = menueSpawnPos;
+        moveObject(clientList[clients.get(playerId)].model, menueSpawnPos);
+        
+      } else {
+        sendAll({header: "playerHit", data: {playerId: playerId, damage: damage}});
       }
 
-      sendAll({header: "playerHit", data: {playerId: playerId, damage: damage}});
     }
   }
 }
