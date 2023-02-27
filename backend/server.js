@@ -34,7 +34,7 @@ let mapObject = {
     cube917322: { //random id nummer
       id: 917322,
       shape: "cube",
-      position: [1, 1, 1],
+      position: [1.5, 1, 1],
       size: [0.5, 0.5, 0.5], //width, height, depth
       color: 0xFF0000 //rot
    }

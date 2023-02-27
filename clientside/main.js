@@ -21,10 +21,11 @@ let playerList = [];
 let isKeyPressed = {keyCodes: {}}
 
 let moveVector = [0, 0];
-let keyMapList = {"KeyW": {exfunc: () => moveVector[0] += -1}, "KeyS": {exfunc: () => moveVector[0] += 1}, "KeyA": {exfunc: () => moveVector[1] += -1}, "KeyD": {exfunc: () => moveVector[1] += 1}, "Space": {exfunc: () => wantToJump()}};
+let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
 
 const moveSpeed = 0.015;
 const dampFactor = 0.2;
+const inAirDampFactor = 0.02;
 
 let playerSize = [0.25, 1, 0.25];
 
@@ -58,9 +59,9 @@ document.body.addEventListener("click", (event)=> {
   ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
 })
 
-let amlight = new THREE.AmbientLight(0xFFFFFF, 0.1);
-let polight = new THREE.PointLight(0xFFFFFF, 1);
-let dilight = new THREE.DirectionalLight(0xFFFFFF, 1);
+let amlight = new THREE.AmbientLight(0xFFFFFF, 0.2);
+let dilight = new THREE.DirectionalLight(0xFFFFFF, 0.9);
+
 
 scene.add(amlight, dilight);
 //ende debugging
@@ -186,6 +187,12 @@ const checkPlayerCollision = (afterMove) => {
         let index = disBounds.indexOf(smallestDis);
         if (index == 3) { //landed / standing on something
           playerList[0].isGrounded = true;
+        } else if (index == 0 || index == 1) {
+          //touching in x axis, velocity of x axis is set to 0
+          playerList[0].velocity.x = 0;
+        } else if (index == 4 || index == 5) {
+          //touching in z axis,velocity of z axis is set to 0
+          playerList[0].velocity.z = 0;
         }
         let moveMap = whereToMoveAtCollision[index]
         bounds[index] +=  moveMap[6];
@@ -333,7 +340,6 @@ const createCameraControl = (rot) => {
   controls.addEventListener('unlock', function () {
     document.getElementById("menue").style.display = 'block';
     isInMenu = true;
-    //playerList[0].model.visible = true;
   } );
 
   
@@ -402,6 +408,7 @@ const putInGame = (playerId, isMyPlayer, spawnPos) => {
   if (isMyPlayer) {
     updateOwnHp();
     playerList[index].model.visible = false;
+
   } else {
     playerList[index].model.visible = true;
   }
@@ -412,17 +419,24 @@ const putInGame = (playerId, isMyPlayer, spawnPos) => {
 
 const applyPhysics = () => {
   //console.log(playerList[0].isGrounded);
+  let dampening;
+
   if (playerList[0] == undefined) return;
   if (playerList[0].isGrounded) { 
+    //player is on the ground
     playerList[0].velocity.y = 0;
+    dampening = dampFactor;
+  } else {
+    //player is in the air
+    dampening = inAirDampFactor;
   }
 
   if (playerList[0].velocity.dot > 0.001) return;
 
   playerList[0].velocity.y -= 0.005; //gravity, später noch anders (debugging)
 
-  playerList[0].velocity.x += playerList[0].velocity.x * -dampFactor; //keine ahnung wie viel #debugging
-  playerList[0].velocity.z += playerList[0].velocity.z * -dampFactor; //keine ahnung wie viel #debugging
+  playerList[0].velocity.x += playerList[0].velocity.x * -dampening; //keine ahnung wie viel #debugging
+  playerList[0].velocity.z += playerList[0].velocity.z * -dampening; //keine ahnung wie viel #debugging
 
   playerList[0].model.position.add(playerList[0].velocity); 
   playerList[0].position = [playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z];
@@ -473,7 +487,6 @@ const updateCameraFly = () => {
   }
 
 }
-
 
 const animate = () => {
   requestAnimationFrame(animate);
@@ -703,14 +716,16 @@ const recalcPlayerMap = () => {
 //anfang debugging
 createGrid();
 
-moveObject(polight, [-2, 0, 2]);
 //moveObject(camera, [3, 1, -3]);
 moveObject(dilight, [-20, 10, -20]);
 /*const helper = new THREE.CameraHelper( dilight.shadow.camera );
 scene.add( helper );*/
 //dilight.lookAt(new THREE.Vector3(0, 0, 0));
 dilight.castShadow = true;
+dilight.shadow.mapSize.width = 2048;
+dilight.shadow.mapSize.height = 2048;
 //ende debugging
+
 
 addGltfToScene();
 
