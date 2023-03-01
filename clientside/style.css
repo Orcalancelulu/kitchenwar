@@ -16,13 +16,43 @@ body {
 
 
 #menue {
+    display: grid;
+    grid-template-rows: auto auto auto;
     z-index: 10;
     padding-top: 350px;
 }
 
-#playButton {
+.characterCard {
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    margin: 5px;
+}
+
+.character_logo {
+    width: 200px;
+}
+
+#chooseCharacters {
+    position: fixed;
+    width: 80%;
+    top: 35%;
+    left: 10%;
+    display: none;
+    grid-template-columns: auto auto auto auto;
+}
+
+#done_button {
+    font-size: 20px;
+    grid-column-start: 1;
+    grid-column-end: 5;
+    width: 100%
+}
+
+.menuButton {
     display: block;
-    margin: auto;
+    margin: 5px auto 5px auto;
+    min-width: 300px;
     padding: 20px 50px 20px 50px;
     font-size: 30px;
     font-weight: bold;
@@ -30,14 +60,15 @@ body {
     background-color: rgba(0, 0, 0, 0.6);
     border: none;
     user-select: none;
+
 }
 
-#playButton:hover {
+.menuButton:hover {
     cursor: pointer;
     filter: brightness(80%);
 }
 
-#playButton:focus {
+.menuButton:focus {
     outline: none;
 }
 

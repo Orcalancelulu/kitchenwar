@@ -13,7 +13,7 @@
             }
         </script>
         <script type="module" src="main.js"></script>
-        <script src="menue.js"></script>
+        <script type="module" src="menue.js"></script>
     </head>
     <body>
         <canvas id="bg"></canvas>
@@ -22,8 +22,27 @@
             <div id="healthBar"></div>
         </div>
         <div id="menue">
-            <ul id="choosePlayer"></ul>
-            <button id="playButton">PLAY</button>
+            <button id="playButton" class="menuButton">PLAY</button>
+            <button id="characterButton" class="menuButton">Characters</button>
+        </div>
+        <div id="chooseCharacters">
+            <div class="characterCard">
+                <p class="characterCardTitle">TOASTER</p>
+                <img class="character_logo" src="models/toaster/logo_toaster.png">
+            </div>
+            <div class="characterCard">
+                <p class="characterCardTitle">BOILER</p>
+                <img class="character_logo" src="models/toaster/logo_toaster.png">
+            </div>
+            <div class="characterCard">
+                <p class="characterCardTitle">DINGS</p>
+                <img class="character_logo" src="models/toaster/logo_toaster.png">
+            </div>
+            <div class="characterCard">
+                <p class="characterCardTitle">DINGS2</p>
+                <img class="character_logo" src="models/toaster/logo_toaster.png">
+            </div>
+            <button class="menuButton" id="done_button">Back</button>
         </div>
     </body>
 </html>
