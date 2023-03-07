@@ -29,6 +29,11 @@ body {
     margin: 5px;
 }
 
+.characterCard:hover {
+    cursor: pointer;
+    filter: brightness(80%);
+}
+
 .character_logo {
     width: 200px;
 }

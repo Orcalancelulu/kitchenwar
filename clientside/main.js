@@ -4,6 +4,7 @@ import { GLTFLoader } from 'GLTFLoader';
 
 
 
+
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 20);
 let renderer;
@@ -23,9 +24,11 @@ let isKeyPressed = {keyCodes: {}}
 let moveVector = [0, 0];
 let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
 
-const moveSpeed = 0.015;
-const dampFactor = 0.2;
-const inAirDampFactor = 0.02;
+//movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger)
+let movementDataPresets = [{movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
+
+let movementData = movementDataPresets[0];
+
 
 let playerSize = [0.25, 1, 0.25];
 
@@ -83,6 +86,28 @@ function player (id, position, model, hp, rotation, walkVector) {
   this.isOnStandby = true;
 }
 
+
+export function changeSelectedCharacter(characterId) {
+
+  //you can only change characters if your not in the game
+  if (isInGame) return;
+
+  changeToCharacterMenu(); //menu goes back to home menu
+
+  //change movement presets (speed, sort of movement)
+  movementData = movementDataPresets[characterId];
+
+  //change look and models
+
+
+  //change attacking presets
+
+
+  //send message to server
+
+}
+
+
 const createSkybox = async () => {
   const loader = new THREE.CubeTextureLoader();
   loader.setPath('texture/');
@@ -117,6 +142,8 @@ const addGltfToScene = () => {
 }
 
 
+
+
 const movePlayer = (vector, playerObj) => {
 
 
@@ -124,31 +151,38 @@ const movePlayer = (vector, playerObj) => {
   playerList[0].isWalking = true;
 
 
-  let lookVector = new THREE.Vector3();
-  playerObj.getWorldDirection(lookVector);
+  if (movementData.movementType == 0) {
+    
+    let lookVector = new THREE.Vector3();
+    playerObj.getWorldDirection(lookVector);
+
+    playerList[0].velocity.add(new THREE.Vector3(lookVector.x * movementData.moveSpeed * vector[0] +lookVector.z * movementData.moveSpeed * vector[1], 0, lookVector.z * movementData.moveSpeed* vector[0] + -lookVector.x * movementData.moveSpeed* vector[1]));
+  
+  } else if(movementData.movementType == 1) {
+
+    //turn player if needed
+    let currentAngleOfBody = new THREE.Euler(0, 0, 0, "YXZ");
+    let currentAngleOfCamera = new THREE.Euler(0, 0, 0, "YXZ");
+
+    currentAngleOfBody.setFromQuaternion(playerObj.quaternion);
+    currentAngleOfCamera.setFromQuaternion(camera.quaternion);
+
+    //when you drive back, the steering should flip, as if you are in a car
+    if (vector[0] <= 0) vector[1] = vector[1] * -1;
+
+    currentAngleOfBody.y += vector[1] * movementData.turnSpeed;
+    currentAngleOfCamera.y += vector[1] * movementData.turnSpeed;
 
 
-  playerList[0].velocity.add(new THREE.Vector3(lookVector.x * moveSpeed * vector[0] +lookVector.z * moveSpeed * vector[1], 0, lookVector.z * moveSpeed* vector[0] + -lookVector.x * moveSpeed* vector[1]));
+    playerObj.quaternion.setFromEuler(currentAngleOfBody);
+    camera.quaternion.setFromEuler(currentAngleOfCamera);
+
+
+    //add velocity if needed
+    movementData.currentSpeed += movementData.moveSpeed * vector[0];
+    
+  }
  
- // console.log(playerList[0].velocity);
-  //old stuff beginnign  *********************************************
-/*
-  playerObj.position.add(new THREE.Vector3(lookVector.x * moveSpeed * vector[0] +lookVector.z * moveSpeed * vector[1], 0, lookVector.z * moveSpeed* vector[0] + -lookVector.x * moveSpeed* vector[1]));
-  
-  playerList[0].position = [playerObj.position.x, playerObj.position.y, playerObj.position.z];
-  
-
-  //own player is moving
-  let afterWalk = [playerObj.position.x, playerObj.position.y, playerObj.position.z];
-  checkPlayerCollision(afterWalk);
-
-  isMoving = true;
-  moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
-
-
-  ws.send(JSON.stringify({header: "walkevent", data: {walkvector: vector, position: [playerObj.position.x, playerObj.position.y, playerObj.position.z], isGrounded: playerList[0].isGrounded}}))
-  */
-  //old stuff end ****************************************************
 }
 
 
@@ -323,6 +357,7 @@ const createCameraControl = (rot) => {
   document.getElementById("playButton").addEventListener( 'click', function () {
     
     controls.lock();
+  
   });
 
   controls.addEventListener('lock', function () {
@@ -399,13 +434,13 @@ const putInGame = (playerId, isMyPlayer, spawnPos) => {
   let playerObj = playerList[index];
 
   moveObject(playerObj.model, spawnPos);
-  moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
 
   //console.log("moving...")
   playerList[index].isOnStandby = false;
   playerList[index].hp = 100; //debugging, später  noch anpassbare maxHp
-  //console.log(isMyPlayer);
+
   if (isMyPlayer) {
+    moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
     updateOwnHp();
     playerList[index].model.visible = false;
 
@@ -425,18 +460,29 @@ const applyPhysics = () => {
   if (playerList[0].isGrounded) { 
     //player is on the ground
     playerList[0].velocity.y = 0;
-    dampening = dampFactor;
+    dampening = movementData.dampFactor;
   } else {
     //player is in the air
-    dampening = inAirDampFactor;
+    dampening = movementData.inAirDampFactor;
   }
 
-  if (playerList[0].velocity.dot > 0.001) return;
+  if (playerList[0].velocity.length > 0.001) return;
 
   playerList[0].velocity.y -= 0.005; //gravity, später noch anders (debugging)
 
-  playerList[0].velocity.x += playerList[0].velocity.x * -dampening; //keine ahnung wie viel #debugging
-  playerList[0].velocity.z += playerList[0].velocity.z * -dampening; //keine ahnung wie viel #debugging
+  if (movementData.movementType == 0) {
+    playerList[0].velocity.x += playerList[0].velocity.x * -dampening; //keine ahnung wie viel #debugging
+    playerList[0].velocity.z += playerList[0].velocity.z * -dampening; //keine ahnung wie viel #debugging  
+  } else if (movementData.movementType == 1) {
+    
+    let lookVector = new THREE.Vector3();
+    playerList[0].model.getWorldDirection(lookVector);
+
+    playerList[0].velocity = new THREE.Vector3(lookVector.x * movementData.currentSpeed, playerList[0].velocity.y, lookVector.z * movementData.currentSpeed);
+
+    movementData.currentSpeed = movementData.currentSpeed / dampening;
+    
+  }
 
   playerList[0].model.position.add(playerList[0].velocity); 
   playerList[0].position = [playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z];

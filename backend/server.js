@@ -196,7 +196,7 @@ wss.on('connection', (ws) => {
   //sendet dem neu gespawnten Spieler alle positionen und rotationen der Spieler
   clientList.forEach((player) => {
     sendTo({header: "newPlayer", data: {position: player.position, rotation: player.rotation, playerId: player.id, hp: player.hp}}, ws);
-    sendTo({header: "playerJoined", data: {position: player.position, playerId: player.id}}, ws);
+    if (player.isInGame) sendTo({header: "playerJoined", data: {position: player.position, playerId: player.id}}, ws);
 
   })
 

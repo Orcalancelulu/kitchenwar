@@ -13,9 +13,15 @@
             }
         </script>
         <script type="module" src="main.js"></script>
-        <script type="module" src="menue.js"></script>
+
+        <script type="module">
+            import { changeSelectedCharacter } from "/main.js";
+            window.changeSelectedCharacter = changeSelectedCharacter;
+        </script>
+
     </head>
     <body>
+
         <canvas id="bg"></canvas>
         <p id="healthDisplay">100</p>
         <div id="healthBarContainer">
@@ -26,23 +32,26 @@
             <button id="characterButton" class="menuButton">Characters</button>
         </div>
         <div id="chooseCharacters">
-            <div class="characterCard">
+            <div class="characterCard" onclick="changeSelectedCharacter(0)">
+                <p class="characterCardTitle">KETTLE</p>
+                <img class="character_logo" src="models/toaster/logo_toaster.png">
+            </div>
+            <div class="characterCard" onclick="changeSelectedCharacter(1)">
                 <p class="characterCardTitle">TOASTER</p>
                 <img class="character_logo" src="models/toaster/logo_toaster.png">
             </div>
-            <div class="characterCard">
-                <p class="characterCardTitle">BOILER</p>
-                <img class="character_logo" src="models/toaster/logo_toaster.png">
-            </div>
-            <div class="characterCard">
+            <div class="characterCard" onclick="changeSelectedCharacter(2)">
                 <p class="characterCardTitle">DINGS</p>
                 <img class="character_logo" src="models/toaster/logo_toaster.png">
             </div>
-            <div class="characterCard">
+            <div class="characterCard" onclick="changeSelectedCharacter(3)">
                 <p class="characterCardTitle">DINGS2</p>
                 <img class="character_logo" src="models/toaster/logo_toaster.png">
             </div>
             <button class="menuButton" id="done_button">Back</button>
         </div>
+
+
+        <script src="menue.js"></script>
     </body>
 </html>
