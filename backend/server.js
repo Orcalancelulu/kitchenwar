@@ -29,15 +29,33 @@ let mapObject = {
       shape: "cube",
       position: [0, 1, 0],
       size: [1.1, 1.1, 1.1], //width, height, depth
-      color: 0x0000FF //blau
+      color: 0x0000FF, //blau
+      isVisible: true
     },
     cube917322: { //random id nummer
       id: 917322,
       shape: "cube",
       position: [1.5, 1, 1],
       size: [0.5, 0.5, 0.5], //width, height, depth
-      color: 0xFF0000 //rot
-   }
+      color: 0xFF0000, //rot 
+      isVisible: true
+   },
+   coll9249: {position: [13.47049593925476,2.556300196587929,32.03996793272812], size: [4.370514750480652, 4.448986047010744, 28.867869986200184]},
+   coll5885: {position: [27.51449182990683,2.5356705792056027,22.56412559449208], size: [9.743382639954348, 4.407726812246092, 4.209177619228122]},
+   coll4671: {position: [27.51449182990683,2.5356705792056027,33.34101015030873], size: [9.743382639954348, 4.407726812246092, 4.209177619228122]},
+   coll4430: {position: [23.974475190590503,2.5593533739447154,11.069169044494629], size: [16.743707471248815, 4.455092401724317, 4.547296464443207]},
+   coll7687: {position: [40.51223902051106,2.593333843587518,26.631405751806128], size: [4.484114889644957, 4.5230533410099225, 22.779541460953798]},
+   coll7569: {position: [13.47049593925476,7.282411891614062,47.684041881097016], size: [4.370514750480652, 13.901209437063013, 2.5016312420476865]},
+   coll5759: {position: [13.47049593925476,7.282411891614063,60.44236186903383], size: [4.370514750480652, 13.901209437063015, 2.4355512152574477]},
+   coll3298: {position: [13.47049593925476,7.282411891614062,73.29620256537495], size: [4.370514750480652, 13.901209437063013, 2.6549106923951626]},
+   coll4985: {position: [29.205024889914313,8.491291162249071,75.90267576772135], size: [27.098543150838452, 16.31896797833303, 2.558035712297624]},
+   coll4398: {position: [28.81543695347311,8.38797535475206,73.110232975244], size: [8.773122425985349, 16.112336363339008, 3.026849872657067]},
+   coll8684: {position: [44.23890190171406,8.491208465249743,65.05834049294613], size: [2.969210872761039, 16.318802584334374, 24.24670626184806]},
+   coll4923: {position: [40.51223902051106,8.203783705421527,46.80463090053163], size: [4.484114889644957, 15.743953064677942, 17.59658500899839]},
+   coll5388: {position: [13.477928104950164,5.5208906199587755,11.075817560387677], size: [4.329131333950418, 10.95198119361135, 4.560593496229304]},
+   coll7665: {position: [40.59756398200989,5.664344194923503,12.576205730438232], size: [4.5032912492752075, 10.665074043681894, 5.496389865875244]}
+
+   
   }
 }
 //fertig hardcoded
@@ -121,6 +139,7 @@ function client(id, ws, position, model, rotation, hp) {
   this.hp = hp;
   this.model = model
   this.isInGame = false;
+  this.characterId = 0;
 }
 
 //check if message from client is JSON data
@@ -196,7 +215,7 @@ wss.on('connection', (ws) => {
   //sendet dem neu gespawnten Spieler alle positionen und rotationen der Spieler
   clientList.forEach((player) => {
     sendTo({header: "newPlayer", data: {position: player.position, rotation: player.rotation, playerId: player.id, hp: player.hp}}, ws);
-    if (player.isInGame) sendTo({header: "playerJoined", data: {position: player.position, playerId: player.id}}, ws);
+    if (player.isInGame) sendTo({header: "playerJoined", data: {position: player.position, playerId: player.id, characterId: player.characterId}}, ws);
 
   })
 
@@ -248,7 +267,9 @@ wss.on('connection', (ws) => {
       clientList[clients.get(id)].isInGame = true;
 
       console.log(pos);
-      sendAll({header: "playerJoined", data: {position: pos, playerId: id}})
+      sendAll({header: "playerJoined", data: {position: pos, playerId: id, characterId: myclient.characterId}});
+    } else if (message.header == "changedCharacter" ) {
+      clientList[clients.get(id)].characterId = message.data.characterId;
     }
   });
 

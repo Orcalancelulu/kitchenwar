@@ -6,11 +6,11 @@ import { GLTFLoader } from 'GLTFLoader';
 
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 20);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
 let renderer;
 
-let mapSize = 120; //mit einer mapSize von 120 * 120 und einer Chunkgrösse von 4*4 gibt es 30*30 Chunks --> 900 Chunks insgesamt
-let chunkSize = 4;
+let mapSize = 120; //mit einer mapSize von 120 * 120 und einer Chunkgrösse von 12*12 gibt es 10*10 Chunks --> 100 Chunks insgesamt
+let chunkSize = 12;
 let chunkXYToIndex;
 let chunkList;
 
@@ -21,14 +21,20 @@ let playerList = [];
 
 let isKeyPressed = {keyCodes: {}}
 
+let getColliderCoordsDebuggingX = [];
+let getColliderCoordsDebuggingZ = [];
+let getColliderCoordsDebuggingY = [];
+
+
 let moveVector = [0, 0];
 let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
 
-//movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger)
+//movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger) speedmode
 let movementDataPresets = [{movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
 
 let movementData = movementDataPresets[0];
 
+let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster.glb", "models/wasserkocher/wasserkocher.glb", "models/wasserkocher/wasserkocher.glb"];
 
 let playerSize = [0.25, 1, 0.25];
 
@@ -53,17 +59,49 @@ let whereToMoveAtCollision = {
   5: [0, 0, 1, 1, 1, 0, 0.01, 1]
 }
 
+
+
 //anfang debugging
+
+function getCoordsOfRaycast(axis) {
+  let lookVector = new THREE.Vector3;
+  camera.getWorldDirection(lookVector);
+  
+  if (axis == "x") return rayChecker(camera.position, lookVector, 0.01, 50).x;
+  if (axis == "y") return rayChecker(camera.position, lookVector, 0.01, 50).y;
+  return rayChecker(camera.position, lookVector, 0.01, 50).z;
+
+}
+
+function takeCoordsAndPrintOut() {
+  let width = Math.abs(getColliderCoordsDebuggingX[1] - getColliderCoordsDebuggingX[0]);
+  let depth = Math.abs(getColliderCoordsDebuggingZ[1] - getColliderCoordsDebuggingZ[0]);
+  let height = Math.abs(getColliderCoordsDebuggingY[1] - getColliderCoordsDebuggingY[0]);
+
+  let centerCoord = [(getColliderCoordsDebuggingX[1] + getColliderCoordsDebuggingX[0])/2, (getColliderCoordsDebuggingY[1] + getColliderCoordsDebuggingY[0])/2, (getColliderCoordsDebuggingZ[1] + getColliderCoordsDebuggingZ[0])/2];
+
+  //console.log("width: " + width + ", depth: " + depth + ", height: " + height);
+  //console.log("center Coord: " + centerCoord)
+  let randomId = Math.floor(Math.random() * 10000);
+  console.log("coll" + randomId + ": {position: ["+ centerCoord +"], size: [" + width +", " + height + ", " + depth + "]}");
+
+  getColliderCoordsDebuggingX = [];
+  getColliderCoordsDebuggingZ = [];
+  getColliderCoordsDebuggingY = [];
+}
 
 document.body.addEventListener("click", (event)=> {
   if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
   let lookVector = new THREE.Vector3;
   camera.getWorldDirection(lookVector);
+  
+  rayChecker(camera.position, lookVector, 0.01, 50); //debugging
+
   ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
 })
 
-let amlight = new THREE.AmbientLight(0xFFFFFF, 0.2);
-let dilight = new THREE.DirectionalLight(0xFFFFFF, 0.9);
+let amlight = new THREE.AmbientLight(0xFFFFFF, 0.6);
+let dilight = new THREE.DirectionalLight(0xFFFFFF, 0.8);
 
 
 scene.add(amlight, dilight);
@@ -98,13 +136,13 @@ export function changeSelectedCharacter(characterId) {
   movementData = movementDataPresets[characterId];
 
   //change look and models
-
+  //loadBetterModel(modelPaths[characterId], playerList[0].id, playerList[0].position, false);
 
   //change attacking presets
 
 
   //send message to server
-
+  ws.send(JSON.stringify({header: "changedCharacter", data: {characterId: characterId}}));
 }
 
 
@@ -119,11 +157,12 @@ const createSkybox = async () => {
 
 const addGltfToScene = () => {
   const loader = new GLTFLoader();
-  loader.load("models/wasserkocher/wasserkocher.glb", function ( gltf ) {
-    gltf.scene.scale.set(0.2, 0.2, 0.2);
-    moveObject(gltf.scene, [2, 0.5, 2]);
+  loader.load("models/kitchen.glb", function ( gltf ) {
+    gltf.scene.scale.set(5, 5, 5);
+    moveObject(gltf.scene, [30, 4, 40]);
     scene.add(gltf.scene);
-
+    gltf.scene.castShadow = true;
+    gltf.scene.receiveShadow = true;
     mixer = new THREE.AnimationMixer(gltf.scene);
     let action = mixer.clipAction(gltf.animations[0]);
 
@@ -173,6 +212,12 @@ const movePlayer = (vector, playerObj) => {
     currentAngleOfBody.y += vector[1] * movementData.turnSpeed;
     currentAngleOfCamera.y += vector[1] * movementData.turnSpeed;
 
+    if (vector[1] != 0) {
+      let quat = playerObj.quaternion;
+      ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
+    }
+
+
 
     playerObj.quaternion.setFromEuler(currentAngleOfBody);
     camera.quaternion.setFromEuler(currentAngleOfCamera);
@@ -194,17 +239,19 @@ const checkPlayerCollision = (afterMove) => {
   
   playerList[0].isGrounded = false;
   //spieler landet auf dem Boden
-  if (afterMove[1]-playerSize[1]*0.5 <= 0) {
+  let groundHeight = 0.331;
+  if (afterMove[1]-playerSize[1]*0.5 <= groundHeight) {
 
     playerList[0].isGrounded = true;
 
-    playerList[0].model.position.y = playerSize[1]*0.5;
-    playerList[0].position[1] = playerSize[1]*0.5;
+    playerList[0].model.position.y = playerSize[1]*0.5 + groundHeight; //debugging ground height
+    playerList[0].position[1] = playerSize[1]*0.5 + groundHeight;
 
   }
 
   chunksToCheck.forEach((chunk) => {
     chunk = chunkList[chunk];
+
     Object.keys(chunk.objects).forEach((key) => {
       let objectToCheck = chunk.objects[key];
       let bounds = getBoxBounds(objectToCheck.position, objectToCheck.size);
@@ -253,10 +300,10 @@ const createPlayerModel = (pos) => {
   return cube;
 }
 
-const loadBetterModel = (playerId, pos, myPlayer, rotation) => {
+const loadBetterModel = (modelPath, playerId, pos, shouldCreateCameraControl, rotation) => {
   
   const loader = new GLTFLoader();
-  loader.load("models/wasserkocher/wasserkocher.glb", function ( gltf ) {
+  loader.load(modelPath, function ( gltf ) {
     gltf.scene.scale.set(0.2, 0.2, 0.2);
     scene.add(gltf.scene);
 
@@ -267,7 +314,7 @@ const loadBetterModel = (playerId, pos, myPlayer, rotation) => {
     scene.remove(playerList[playerIdToIndex.get(playerId)].model);
     playerList[playerIdToIndex.get(playerId)].model = gltf.scene;
     
-    if (myPlayer) {
+    if (shouldCreateCameraControl) {
       createCameraControl(rotation); //createCameraControl ist hier und nicht in der Nachrichtsankunft, da der loader ziemlich viel Zeit braucht. createCameraControl braucht aber das zeugs vom loader 
     }
     playerList[playerIdToIndex.get(playerId)].hpModel = createFloatingHp(playerId);
@@ -284,7 +331,7 @@ const createPlayer = (pos, id, hp, myPlayer, rotation) => {
 
   playerIdToIndex.set(id, index);
   playerList[index] = new player(id, pos, createPlayerModel(pos), hp);
-  loadBetterModel(id, pos, myPlayer, rotation); //loads the real model, takes longer so a dummy model gets loaded first for movement (only few millisec)
+  loadBetterModel("models/wasserkocher/wasserkocher.glb", id, pos, myPlayer, rotation); //loads the real model, takes longer so a dummy model gets loaded first for movement (only few millisec)
   console.log("loading model");
 
 }
@@ -337,7 +384,7 @@ const wantToJump = () => {
   //console.log(playerList[0].isGrounded);
   if (!playerList[0].isGrounded) return;
   playerList[0].isGrounded = false;
-  playerList[0].velocity.add(new THREE.Vector3(0, 0.1, 0));
+  playerList[0].velocity.add(new THREE.Vector3(0, 0.1, 0)); //speedmode
   playerList[0].model.position.y += 0.01;
 }
 
@@ -347,7 +394,7 @@ const createCameraControl = (rot) => {
   camera.setRotationFromQuaternion(quaternion);
   playerList[0].model.setRotationFromQuaternion(quaternion);
 
-  controls = new PointerLockControls( camera, document.body, playerList[0].model, function(quat) {
+  controls = new PointerLockControls( camera, document.body, () => playerList[0].model, function(quat) {
     //rotation an server schicken
 
     ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
@@ -427,7 +474,7 @@ const putToStandby = (playerId, isMyPlayer) => {
   }
 }
 
-const putInGame = (playerId, isMyPlayer, spawnPos) => {
+const putInGame = (playerId, isMyPlayer, spawnPos, characterId) => {
   let index = playerIdToIndex.get(playerId);
   //console.log(index);
   //console.log(playerList[index]);
@@ -446,6 +493,8 @@ const putInGame = (playerId, isMyPlayer, spawnPos) => {
 
   } else {
     playerList[index].model.visible = true;
+    console.log("loading stuff");
+    loadBetterModel(modelPaths[characterId], playerId, spawnPos, false);
   }
 
   updateFloatingHp(playerList[index].hp, playerId);
@@ -634,7 +683,7 @@ const updateHealth = (playerId, damage) => {
 }
 
 const createFloatingHp = (playerId) => {
-
+/*
   let playerObject = playerList[playerIdToIndex.get(playerId)];
 
   const map = new THREE.TextureLoader().load( '/texture/hpBar.png' );
@@ -651,15 +700,15 @@ const createFloatingHp = (playerId) => {
 
   playerObject.model.add(sprite);
   return sprite;
-
+*/
 }
 
 const updateFloatingHp = (hp, playerId) => {  
-
+/*
   const hpRatio = hp / 100; //100 = maxHp, wird später noch geändert, soll nicht hardgecoded sein
 
   playerList[playerIdToIndex.get(playerId)].hpModel.scale.set(hpRatio * 1.5, 0.3, 1);
-
+*/
 }
 
 const updateOwnHp = () => {
@@ -680,7 +729,8 @@ const createObject = (object) => {
 
   } else if(object.shape == "plane") {    
     const geometry = new THREE.PlaneGeometry(object.size[0], object.size[1]);
-    const material = new THREE.MeshStandardMaterial( {color: object.color} );
+    const material = new THREE.MeshStandardMaterial( {color: 0x707070} );
+    
     const plane = new THREE.Mesh(geometry, material);
     scene.add(plane);
     plane.receiveShadow = true;
@@ -697,7 +747,7 @@ const generateMap = (mapObject) => {
   generateChunkMap();
 
   //generate Ground Plane
-  createObject({shape: "plane", size: [mapSize, mapSize], position: [mapSize/2, 0, mapSize/2], orientation: [mapSize/2, 1, mapSize/2]});
+  //createObject({shape: "plane", size: [mapSize, mapSize], position: [mapSize/2, 0, mapSize/2], orientation: [mapSize/2, 1, mapSize/2]});
 
   //go through every object in the mapObject.objects
   Object.keys(mapObject.objects).forEach((key) => {
@@ -705,12 +755,14 @@ const generateMap = (mapObject) => {
 
     //findet den Index des Chunks heruas, wo sich das Objekt befindet
     let chunkIndex = findChunkWithCoord([object.position[0], object.position[2]]);
+    //console.log(chunkIndex);
 
     //das Objekt wird nun dem richtigen Chunk hinzugefügt
+    if (object.id == undefined) object.id = Math.floor(Math.random() * 10000);
     chunkList[chunkIndex].objects["object" + object.id] = object;
 
     //das Objekt wird nun erstellt
-    createObject(object);
+    if (object.isVisible) createObject(object);
   });
 
 };
@@ -720,9 +772,16 @@ const createListener = () => {
   document.body.addEventListener("keydown", (event) => {
     isKeyPressed.keyCodes[event.code] = true;
     
+
   })
   document.body.addEventListener("keyup", (event) => {
     isKeyPressed.keyCodes[event.code] = false;
+
+    //y and z are swapped because keyboard
+    if (event.code == "KeyX") getColliderCoordsDebuggingX[getColliderCoordsDebuggingX.length] = getCoordsOfRaycast("x");
+    if (event.code == "KeyY") getColliderCoordsDebuggingZ[getColliderCoordsDebuggingZ.length] = getCoordsOfRaycast("z");
+    if (event.code == "KeyZ") getColliderCoordsDebuggingY[getColliderCoordsDebuggingY.length] = getCoordsOfRaycast("y");
+    if (event.code == "KeyT") takeCoordsAndPrintOut();
   })
 }
 
@@ -760,7 +819,7 @@ const recalcPlayerMap = () => {
 
 
 //anfang debugging
-createGrid();
+//createGrid();
 
 //moveObject(camera, [3, 1, -3]);
 moveObject(dilight, [-20, 10, -20]);
@@ -770,8 +829,31 @@ scene.add( helper );*/
 dilight.castShadow = true;
 dilight.shadow.mapSize.width = 2048;
 dilight.shadow.mapSize.height = 2048;
+
 //ende debugging
 
+
+//raycasts for easy creation of colliders
+function rayChecker(startVec, dirVec, near, far) {
+  let raycaster = new THREE.Raycaster();
+  raycaster.set(startVec, dirVec, near, far);
+  const intersects = raycaster.intersectObjects(scene.children);
+
+  if (intersects.length > 0) {
+    const geometry = new THREE.SphereGeometry(0.3, 5, 5);
+    const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
+    const sphere = new THREE.Mesh( geometry, material );
+    scene.add( sphere );
+    let index = 1;
+    while (intersects[0].distance < 1 && index < intersects.length) {
+      intersects[0] = intersects[index];
+      index += 1;
+    }
+    if (intersects[0].distance < 1) intersects[0] = intersects[1];
+    sphere.position.set(intersects[0].point.x, intersects[0].point.y, intersects[0].point.z);
+    return intersects[0].point;
+  }
+}
 
 addGltfToScene();
 
@@ -834,8 +916,8 @@ ws.onmessage = (event) => {
 
 
   } else if (message.header == "playerJoined") {
-    console.log("Player joined the game");
-    putInGame(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0, message.data.position);
+    console.log("Player joined the game: " + message.data.characterId);
+    putInGame(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0, message.data.position, message.data.characterId);
     
   } else if (message.header == "putToStandby") {
     console.log("Putting to standby because: " + message.data.cause);

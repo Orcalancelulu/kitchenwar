@@ -17,7 +17,7 @@ const _PI_2 = Math.PI / 2;
 
 class PointerLockControls extends EventDispatcher {
 
-	constructor( camera, domElement, bodyElement, funcToCallOnMove) {
+	constructor( camera, domElement, getBodyElement, funcToCallOnMove) {
 
 		super();
 
@@ -35,11 +35,12 @@ class PointerLockControls extends EventDispatcher {
 		const scope = this;
 
 		function onMouseMove( event ) {
-
 			if ( scope.isLocked === false ) return;
 
 			const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
 			const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+			let bodyElement = getBodyElement();
 
 			//console.log(movementX);
 			_euler.setFromQuaternion( camera.quaternion );
