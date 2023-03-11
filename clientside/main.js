@@ -24,6 +24,7 @@ let isKeyPressed = {keyCodes: {}}
 let getColliderCoordsDebuggingX = [];
 let getColliderCoordsDebuggingZ = [];
 let getColliderCoordsDebuggingY = [];
+let cameraSmoothPositionsList = [];
 
 
 let moveVector = [0, 0];
@@ -94,8 +95,13 @@ document.body.addEventListener("click", (event)=> {
   if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
   let lookVector = new THREE.Vector3;
   camera.getWorldDirection(lookVector);
-  
-  rayChecker(camera.position, lookVector, 0.01, 50); //debugging
+  //let angleCamera = new THREE.Euler(0, 0, 0, "YXZ");
+
+  //let eulerList = [angleCamera.setFromQuaternion(camera.quaternion).x*57.2957, angleCamera.setFromQuaternion(camera.quaternion).y*57.2957, angleCamera.setFromQuaternion(camera.quaternion).z*57.2957];
+  //console.log(eulerList);
+  //lookVector = new THREE.Vector3(camera.position.x - playerList[0].model.position.x, camera.position.y - playerList[0].model.position.y, camera.position.z - playerList[0].model.position.z).normalize();
+  //console.log(lookVector);
+  //rayChecker(camera.position, lookVector, 0.01, 50); //debugging
 
   ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
 })
@@ -201,16 +207,18 @@ const movePlayer = (vector, playerObj) => {
 
     //turn player if needed
     let currentAngleOfBody = new THREE.Euler(0, 0, 0, "YXZ");
-    let currentAngleOfCamera = new THREE.Euler(0, 0, 0, "YXZ");
+
+    //temp. removed camera rotation
+    //let currentAngleOfCamera = new THREE.Euler(0, 0, 0, "YXZ");
 
     currentAngleOfBody.setFromQuaternion(playerObj.quaternion);
-    currentAngleOfCamera.setFromQuaternion(camera.quaternion);
+    //currentAngleOfCamera.setFromQuaternion(camera.quaternion);
 
     //when you drive back, the steering should flip, as if you are in a car
     if (vector[0] <= 0) vector[1] = vector[1] * -1;
 
     currentAngleOfBody.y += vector[1] * movementData.turnSpeed;
-    currentAngleOfCamera.y += vector[1] * movementData.turnSpeed;
+    //currentAngleOfCamera.y += vector[1] * movementData.turnSpeed;
 
     if (vector[1] != 0) {
       let quat = playerObj.quaternion;
@@ -220,7 +228,7 @@ const movePlayer = (vector, playerObj) => {
 
 
     playerObj.quaternion.setFromEuler(currentAngleOfBody);
-    camera.quaternion.setFromEuler(currentAngleOfCamera);
+    //camera.quaternion.setFromEuler(currentAngleOfCamera);
 
 
     //add velocity if needed
@@ -412,11 +420,12 @@ const createCameraControl = (rot) => {
     isInGame = true;
     isInMenu = false;
     camera.position.set(playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z);
+    cameraSmoothPositionsList = [];
     camera.quaternion.copy(playerList[0].model.quaternion);
     
     if (playerList[0].isOnStandby) ws.send(JSON.stringify({header: "joiningGame"}));
 
-    playerList[0].model.visible = false;
+    playerList[0].model.visible = true;
   } );
 
   controls.addEventListener('unlock', function () {
@@ -489,7 +498,7 @@ const putInGame = (playerId, isMyPlayer, spawnPos, characterId) => {
   if (isMyPlayer) {
     moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
     updateOwnHp();
-    playerList[index].model.visible = false;
+    playerList[index].model.visible = true;
 
   } else {
     playerList[index].model.visible = true;
@@ -538,7 +547,8 @@ const applyPhysics = () => {
 
   checkPlayerCollision(playerList[0].position);
 
-  moveObject(camera, [playerList[0].position[0], playerList[0].position[1]+playerSize[1]*0.25, playerList[0].position[2]]);
+  //hier 3rd person einbauen
+  //moveObject(camera, [playerList[0].position[0], playerList[0].position[1]+playerSize[1]*0.25, playerList[0].position[2]]);
 
   ws.send(JSON.stringify({header: "walkevent", data: {position: playerList[0].position, rotation: [playerList[0].model.quaternion.x, playerList[0].model.quaternion.y, playerList[0].model.quaternion.z, playerList[0].model.quaternion.w], isGrounded: false}}))
 }
@@ -583,13 +593,50 @@ const updateCameraFly = () => {
 
 }
 
-const animate = () => {
+function getFarthestPossibleDistanceForCamera(startPos, direction, maxDistance) {
+
+  let raycaster = new THREE.Raycaster();
+
+  direction = new THREE.Vector3(direction[0], direction[1], direction[2]).normalize();
+  startPos = new THREE.Vector3(startPos[0], startPos[1], startPos[2]);
+
+  raycaster.set(startPos, direction, 0.1, maxDistance);
+  
+  const intersects = raycaster.intersectObjects(scene.children);
+  if (intersects.length > 0) {
+    //-0.2, camera clips through objects a bit
+    if (intersects[0].distance - 0.2 < maxDistance )return intersects[0].distance - 0.2;
+  }
+
+  return maxDistance;
+}
+
+function moveSmoothCamera() {
+  let angleCamera = new THREE.Euler(0, 0, 0, "YXZ");
+  angleCamera.setFromQuaternion(camera.quaternion)
+  let eulerList = [angleCamera.x, angleCamera.y, angleCamera.z];
+  //console.log(eulerList);
+  let distanceToPlayer = 5;
+  let coordsToCircleAround = [playerList[0].position[0], playerList[0].position[1], playerList[0].position[2]];
+
+  let vectorToCamera = [camera.position.x - coordsToCircleAround[0], camera.position.y - coordsToCircleAround[1], camera.position.z - coordsToCircleAround[2]];
+  distanceToPlayer = getFarthestPossibleDistanceForCamera(coordsToCircleAround, vectorToCamera, 10);
+
+  //gets assigned at the end, so the distacne is always 1 frame behind. Not really problematic because of the dampening of the camera position
+  camera.position.x = coordsToCircleAround[0] + Math.sin(eulerList[1]) * Math.cos(eulerList[0]) * distanceToPlayer;
+  camera.position.z = coordsToCircleAround[2] + Math.cos(eulerList[1]) * Math.cos(eulerList[0]) * distanceToPlayer;
+  camera.position.y = coordsToCircleAround[1] + Math.sin(eulerList[0]) * -distanceToPlayer;
+
+}
+
+function animate() {
   requestAnimationFrame(animate);
   checkInput();
   applyPhysics();
   updateAnimations();
 
   updateCameraFly();
+  moveSmoothCamera();
  
   renderer.render(scene, camera);
 };
@@ -851,6 +898,7 @@ function rayChecker(startVec, dirVec, near, far) {
     }
     if (intersects[0].distance < 1) intersects[0] = intersects[1];
     sphere.position.set(intersects[0].point.x, intersects[0].point.y, intersects[0].point.z);
+    console.log(sphere.position);
     return intersects[0].point;
   }
 }
