@@ -6,7 +6,9 @@ import { GLTFLoader } from 'GLTFLoader';
 
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 200);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 200);
+camera.layers.enable(1); //layer 1 is map object
+
 let renderer;
 
 let mapSize = 120; //mit einer mapSize von 120 * 120 und einer Chunkgrösse von 12*12 gibt es 10*10 Chunks --> 100 Chunks insgesamt
@@ -24,8 +26,9 @@ let isKeyPressed = {keyCodes: {}}
 let getColliderCoordsDebuggingX = [];
 let getColliderCoordsDebuggingZ = [];
 let getColliderCoordsDebuggingY = [];
-let cameraSmoothPositionsList = [];
 
+let cameraSmoothPositionsList = [];
+let cameraSmoothPositionsListMaxLength = 120; //60 = 1 second to smooth within
 
 let moveVector = [0, 0];
 let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
@@ -161,6 +164,16 @@ const createSkybox = async () => {
   scene.background = cubeTex;
 }
 
+function setLayerToAllChildren(objects, layer) {
+  objects.forEach((object) => {
+    object.layers.set(layer);
+    if (object.children.length != 0) {
+      setLayerToAllChildren(object.children, layer)
+    }
+  })
+
+}
+
 const addGltfToScene = () => {
   const loader = new GLTFLoader();
   loader.load("models/kitchen.glb", function ( gltf ) {
@@ -169,10 +182,14 @@ const addGltfToScene = () => {
     scene.add(gltf.scene);
     gltf.scene.castShadow = true;
     gltf.scene.receiveShadow = true;
-    mixer = new THREE.AnimationMixer(gltf.scene);
-    let action = mixer.clipAction(gltf.animations[0]);
+    gltf.scene.layers.set(1);
+    setLayerToAllChildren(gltf.scene.children, 1); //layer 1 means map
+    console.log(gltf.scene);
+    console.log(gltf.scene.layers.mask);
+    //mixer = new THREE.AnimationMixer(gltf.scene);
+    //let action = mixer.clipAction(gltf.animations[0]);
 
-    action.play();
+    //action.play();
 
 
   },	function ( xhr ) {
@@ -256,7 +273,7 @@ const checkPlayerCollision = (afterMove) => {
     playerList[0].position[1] = playerSize[1]*0.5 + groundHeight;
 
   }
-
+  
   chunksToCheck.forEach((chunk) => {
     chunk = chunkList[chunk];
 
@@ -289,6 +306,7 @@ const checkPlayerCollision = (afterMove) => {
         let newPos = [afterMove[0] * moveMap[3] + bounds[index] * moveMap[0] + playerSize[0] * 0.5 * moveMap[0] * moveMap[7], afterMove[1] * moveMap[4] + bounds[index] * moveMap[1] + playerSize[1] * 0.5 * moveMap[1] * moveMap[7], afterMove[2] * moveMap[5] + bounds[index] * moveMap[2] + playerSize[2] * 0.5 * moveMap[2] * moveMap[7]];
         
         playerList[0].position = newPos;
+        
         moveObject(playerList[0].model, newPos);
 
       }
@@ -349,7 +367,7 @@ const updateAnimations = () => {
     if (!playerInList.isGrounded) { //jump pose
 
     } else if (playerInList.isWalking) { //walking animation
-      mixer.update(0.02);
+      //mixer.update(0.02);
       playerInList.isWalking = false;
     } else {
 
@@ -407,7 +425,7 @@ const createCameraControl = (rot) => {
 
     ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
   });
-  moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
+  //moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
 
   document.getElementById("playButton").addEventListener( 'click', function () {
     
@@ -601,31 +619,71 @@ function getFarthestPossibleDistanceForCamera(startPos, direction, maxDistance) 
   startPos = new THREE.Vector3(startPos[0], startPos[1], startPos[2]);
 
   raycaster.set(startPos, direction, 0.1, maxDistance);
+  raycaster.layers.set(1); //should only hit map objects, not projectiles or other players
   
   const intersects = raycaster.intersectObjects(scene.children);
   if (intersects.length > 0) {
     //-0.2, camera clips through objects a bit
-    if (intersects[0].distance - 0.2 < maxDistance )return intersects[0].distance - 0.2;
+    
+    if (intersects[0].distance)
+    if (intersects[0].distance < maxDistance )return intersects[0].distance;
   }
 
   return maxDistance;
 }
 
 function moveSmoothCamera() {
+  //only 3rd person camera, if player is in game. If not, the camera is flying in circles around the map in the menu
+  if (!isInGame) return;
+
   let angleCamera = new THREE.Euler(0, 0, 0, "YXZ");
   angleCamera.setFromQuaternion(camera.quaternion)
   let eulerList = [angleCamera.x, angleCamera.y, angleCamera.z];
-  //console.log(eulerList);
+  
+  //those value are getting used multiple times, to make it more efficient, it only calculates it once
+  let sin0 = Math.sin(eulerList[0]);
+  let sin1 = Math.sin(eulerList[1]);
+  let cos0 = Math.cos(eulerList[0]);
+  let cos1 =  Math.cos(eulerList[1]);
+
   let distanceToPlayer = 5;
   let coordsToCircleAround = [playerList[0].position[0], playerList[0].position[1], playerList[0].position[2]];
 
-  let vectorToCamera = [camera.position.x - coordsToCircleAround[0], camera.position.y - coordsToCircleAround[1], camera.position.z - coordsToCircleAround[2]];
-  distanceToPlayer = getFarthestPossibleDistanceForCamera(coordsToCircleAround, vectorToCamera, 10);
+  let newCameraPos = new THREE.Vector3();
 
-  //gets assigned at the end, so the distacne is always 1 frame behind. Not really problematic because of the dampening of the camera position
-  camera.position.x = coordsToCircleAround[0] + Math.sin(eulerList[1]) * Math.cos(eulerList[0]) * distanceToPlayer;
-  camera.position.z = coordsToCircleAround[2] + Math.cos(eulerList[1]) * Math.cos(eulerList[0]) * distanceToPlayer;
-  camera.position.y = coordsToCircleAround[1] + Math.sin(eulerList[0]) * -distanceToPlayer;
+  newCameraPos.x = coordsToCircleAround[0] + sin1 * cos0;
+  newCameraPos.z = coordsToCircleAround[2] + cos1 * cos0;
+  newCameraPos.y = coordsToCircleAround[1] - sin0;
+
+  let vectorToCamera = [newCameraPos.x - coordsToCircleAround[0], newCameraPos.y - coordsToCircleAround[1], newCameraPos.z - coordsToCircleAround[2]];
+  distanceToPlayer = getFarthestPossibleDistanceForCamera(coordsToCircleAround, vectorToCamera, distanceToPlayer);
+  let extraSpacing = 2
+  let dampeningFactor;
+
+  if (distanceToPlayer < extraSpacing + 1) {
+    //camera is too close to player -> switch to 1. person view
+    newCameraPos.x = playerList[0].model.position.x;
+    newCameraPos.y = playerList[0].model.position.y + 0.35;
+    newCameraPos.z = playerList[0].model.position.z;
+    playerList[0].model.visible = false;
+    
+    dampeningFactor = 1;
+  } else {
+    //extraSpacing, so camera doesn't clip through objects
+    distanceToPlayer -= extraSpacing; 
+
+    //gets assigned at the end, so the distance is always 1 frame behind. Not really problematic because of the dampening of the camera position
+    newCameraPos.x = coordsToCircleAround[0] + sin1 * cos0 * distanceToPlayer;
+    newCameraPos.z = coordsToCircleAround[2] + cos1 * cos0 * distanceToPlayer;
+    newCameraPos.y = coordsToCircleAround[1] - sin0 * distanceToPlayer;
+    playerList[0].model.visible = true;
+
+
+    dampeningFactor = 0.4;
+  }
+
+  //lerps between position where it should be and position where it is, so it is a bit smoother  
+  camera.position.lerpVectors(camera.position, newCameraPos, dampeningFactor);
 
 }
 
@@ -922,6 +980,7 @@ ws.onmessage = (event) => {
   if (message.header == "event") {
 
   } else if(message.header == "walkevent"){
+    
     let index = playerIdToIndex.get(message.data.id);
     if (index == 0) return;
     
