@@ -647,7 +647,7 @@ function moveSmoothCamera() {
   let cos1 =  Math.cos(eulerList[1]);
 
   let distanceToPlayer = 5;
-  let coordsToCircleAround = [playerList[0].position[0], playerList[0].position[1], playerList[0].position[2]];
+  let coordsToCircleAround = [playerList[0].position[0], playerList[0].position[1] + 1, playerList[0].position[2]];
 
   let newCameraPos = new THREE.Vector3();
 
