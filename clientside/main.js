@@ -27,20 +27,17 @@ let getColliderCoordsDebuggingX = [];
 let getColliderCoordsDebuggingZ = [];
 let getColliderCoordsDebuggingY = [];
 
-let cameraSmoothPositionsList = [];
-let cameraSmoothPositionsListMaxLength = 120; //60 = 1 second to smooth within
-
 let moveVector = [0, 0];
 let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
 
 //movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger) speedmode
-let movementDataPresets = [{movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
+let movementDataPresets = [{movementType: 0, moveSpeed: 0.15, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
 
 let movementData = movementDataPresets[0];
 
-let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster.glb", "models/wasserkocher/wasserkocher.glb", "models/wasserkocher/wasserkocher.glb"];
-
-let playerSize = [0.25, 1, 0.25];
+let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster2.glb", "models/wasserkocher/wasserkocher.glb", "models/wasserkocher/wasserkocher.glb"];
+let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5]]
+let playerSize = [0.4, 1, 0.4];
 
 let mixer;
 
@@ -49,6 +46,9 @@ let isInGame = false;
 let isInMenu = true;
 
 let standByPos = [1, 20, 1];
+
+let wantedDistanceToPlayer = 4;
+let maxDistanceToPlayer = 8;
 
 
 
@@ -78,6 +78,20 @@ function getCoordsOfRaycast(axis) {
 }
 
 function takeCoordsAndPrintOut() {
+  let lookVector = new THREE.Vector3;
+  camera.getWorldDirection(lookVector);
+
+  let point = playerList[0].model.position;
+
+
+  point.x = Math.round(point.x * 100) / 100;
+  point.y = Math.round(point.y * 100) / 100;
+  point.z = Math.round(point.z * 100) / 100;
+
+
+
+  console.log("[" + point.x +", " + point.y + ", " + point.z +"]");
+  if (getColliderCoordsDebuggingX.length + getColliderCoordsDebuggingY.length + getColliderCoordsDebuggingZ.length < 1) return;
   let width = Math.abs(getColliderCoordsDebuggingX[1] - getColliderCoordsDebuggingX[0]);
   let depth = Math.abs(getColliderCoordsDebuggingZ[1] - getColliderCoordsDebuggingZ[0]);
   let height = Math.abs(getColliderCoordsDebuggingY[1] - getColliderCoordsDebuggingY[0]);
@@ -109,11 +123,19 @@ document.body.addEventListener("click", (event)=> {
   ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
 })
 
-let amlight = new THREE.AmbientLight(0xFFFFFF, 0.6);
-let dilight = new THREE.DirectionalLight(0xFFFFFF, 0.8);
+let amlight = new THREE.AmbientLight(0xFFFFFF, 0.8);
+let spotLight = new THREE.SpotLight(0xFFFFFF, 0);
+let dilight = new THREE.DirectionalLight(0xFFFFFF, 1.4);
+dilight.shadow.camera.top = 20;
+dilight.shadow.camera.bottom = -20;
+dilight.shadow.camera.left = -30;
+dilight.shadow.camera.right = 50;
+
+let dilightTarget = new THREE.Object3D();
 
 
-scene.add(amlight, dilight);
+
+scene.add(amlight, dilight, dilightTarget, spotLight);
 //ende debugging
 
 function player (id, position, model, hp, rotation, walkVector) {
@@ -144,8 +166,11 @@ export function changeSelectedCharacter(characterId) {
   //change movement presets (speed, sort of movement)
   movementData = movementDataPresets[characterId];
 
+  //change playerSize
+  playerSize = playerSizes[characterId];
+
   //change look and models
-  //loadBetterModel(modelPaths[characterId], playerList[0].id, playerList[0].position, false);
+  loadBetterModel(modelPaths[characterId], playerList[0].id, playerList[0].position, false);
 
   //change attacking presets
 
@@ -162,13 +187,37 @@ const createSkybox = async () => {
     "2left.png", "3right.png", "4up.png", "5down.png", "0front.png", "1back.png"
   ])
   scene.background = cubeTex;
+
+  //add sun texture
+  /*
+  const sunMap = new THREE.TextureLoader().load( 'texture/sunTex.png' );
+  const sunMaterial = new THREE.SpriteMaterial( { map: sunMap } );
+
+  const sunSprite = new THREE.Sprite( sunMaterial );
+  scene.add( sunSprite );
+  moveObject(sunSprite, [-80, 80, 84.19]);
+  sunSprite.scale.set(20, 20, 1);
+  */
 }
 
-function setLayerToAllChildren(objects, layer) {
+function applyChangesToAllChildren(objects, layer, alpha) {
   objects.forEach((object) => {
+    //changes here
+    
     object.layers.set(layer);
+    if (object.name.indexOf("transparent") > -1) {
+      object.material.transparent = true;   
+      object.material.opacity = alpha;  
+      object.castShadow = false;
+      object.castShadow = false;
+    } else {
+      object.castShadow = true;
+      object.receiveShadow = true;
+      
+    }
+
     if (object.children.length != 0) {
-      setLayerToAllChildren(object.children, layer)
+      applyChangesToAllChildren(object.children, layer, alpha)
     }
   })
 
@@ -183,9 +232,7 @@ const addGltfToScene = () => {
     gltf.scene.castShadow = true;
     gltf.scene.receiveShadow = true;
     gltf.scene.layers.set(1);
-    setLayerToAllChildren(gltf.scene.children, 1); //layer 1 means map
-    console.log(gltf.scene);
-    console.log(gltf.scene.layers.mask);
+    applyChangesToAllChildren(gltf.scene.children, 1, 0.2); //layer 1 means map
     //mixer = new THREE.AnimationMixer(gltf.scene);
     //let action = mixer.clipAction(gltf.animations[0]);
 
@@ -306,9 +353,9 @@ const checkPlayerCollision = (afterMove) => {
         let newPos = [afterMove[0] * moveMap[3] + bounds[index] * moveMap[0] + playerSize[0] * 0.5 * moveMap[0] * moveMap[7], afterMove[1] * moveMap[4] + bounds[index] * moveMap[1] + playerSize[1] * 0.5 * moveMap[1] * moveMap[7], afterMove[2] * moveMap[5] + bounds[index] * moveMap[2] + playerSize[2] * 0.5 * moveMap[2] * moveMap[7]];
         
         playerList[0].position = newPos;
+        afterMove = newPos; //falls man an mehreren objekten gleichzeitig ankommt, soll man auch von beiden beeinflusst werden. Somit muss die neue aftermove festgelegt werden
         
         moveObject(playerList[0].model, newPos);
-
       }
     });
   });
@@ -332,6 +379,8 @@ const loadBetterModel = (modelPath, playerId, pos, shouldCreateCameraControl, ro
   loader.load(modelPath, function ( gltf ) {
     gltf.scene.scale.set(0.2, 0.2, 0.2);
     scene.add(gltf.scene);
+    //console.log(gltf.scene)
+    //applyChangesToAllChildren(gltf.scene.children, 0, 1);
 
     
     moveObject(gltf.scene, pos);
@@ -410,8 +459,14 @@ const wantToJump = () => {
   //console.log(playerList[0].isGrounded);
   if (!playerList[0].isGrounded) return;
   playerList[0].isGrounded = false;
-  playerList[0].velocity.add(new THREE.Vector3(0, 0.1, 0)); //speedmode
+  playerList[0].velocity.add(new THREE.Vector3(0, 0.3, 0)); //speedmode
   playerList[0].model.position.y += 0.01;
+}
+
+function mouseWheelEvent(event) {
+  wantedDistanceToPlayer += event.deltaY * 0.005;
+  if (wantedDistanceToPlayer < 0) wantedDistanceToPlayer = 0;
+  if (wantedDistanceToPlayer > maxDistanceToPlayer) wantedDistanceToPlayer = maxDistanceToPlayer;
 }
 
 const createCameraControl = (rot) => {
@@ -420,7 +475,7 @@ const createCameraControl = (rot) => {
   camera.setRotationFromQuaternion(quaternion);
   playerList[0].model.setRotationFromQuaternion(quaternion);
 
-  controls = new PointerLockControls( camera, document.body, () => playerList[0].model, function(quat) {
+  controls = new PointerLockControls( camera, document.body, () => {if(movementData.movementType == 0) return playerList[0].model}, function(quat) {
     //rotation an server schicken
 
     ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
@@ -433,12 +488,14 @@ const createCameraControl = (rot) => {
   
   });
 
+  window.addEventListener("wheel", event => mouseWheelEvent(event));
+
   controls.addEventListener('lock', function () {
     document.getElementById("menue").style.display = 'none';
     isInGame = true;
     isInMenu = false;
     camera.position.set(playerList[0].model.position.x, playerList[0].model.position.y, playerList[0].model.position.z);
-    cameraSmoothPositionsList = [];
+    //console.log(camera.position);
     camera.quaternion.copy(playerList[0].model.quaternion);
     
     if (playerList[0].isOnStandby) ws.send(JSON.stringify({header: "joiningGame"}));
@@ -514,7 +571,7 @@ const putInGame = (playerId, isMyPlayer, spawnPos, characterId) => {
   playerList[index].hp = 100; //debugging, später  noch anpassbare maxHp
 
   if (isMyPlayer) {
-    moveObject(camera, [playerObj.position.x, playerObj.position.y + playerSize[1]*0.25, playerObj.position.z]);
+    moveObject(camera, [playerObj.position[0], playerObj.position[1] + playerSize[1]*0.25, playerObj.position[2]]);
     updateOwnHp();
     playerList[index].model.visible = true;
 
@@ -636,6 +693,9 @@ function moveSmoothCamera() {
   //only 3rd person camera, if player is in game. If not, the camera is flying in circles around the map in the menu
   if (!isInGame) return;
 
+  //console.log(playerList[0].position);
+  
+
   let angleCamera = new THREE.Euler(0, 0, 0, "YXZ");
   angleCamera.setFromQuaternion(camera.quaternion)
   let eulerList = [angleCamera.x, angleCamera.y, angleCamera.z];
@@ -646,7 +706,6 @@ function moveSmoothCamera() {
   let cos0 = Math.cos(eulerList[0]);
   let cos1 =  Math.cos(eulerList[1]);
 
-  let distanceToPlayer = 5;
   let coordsToCircleAround = [playerList[0].position[0], playerList[0].position[1] + 1, playerList[0].position[2]];
 
   let newCameraPos = new THREE.Vector3();
@@ -656,8 +715,8 @@ function moveSmoothCamera() {
   newCameraPos.y = coordsToCircleAround[1] - sin0;
 
   let vectorToCamera = [newCameraPos.x - coordsToCircleAround[0], newCameraPos.y - coordsToCircleAround[1], newCameraPos.z - coordsToCircleAround[2]];
-  distanceToPlayer = getFarthestPossibleDistanceForCamera(coordsToCircleAround, vectorToCamera, distanceToPlayer);
-  let extraSpacing = 2
+  let distanceToPlayer = getFarthestPossibleDistanceForCamera(coordsToCircleAround, vectorToCamera, wantedDistanceToPlayer);
+  let extraSpacing = 0.5;
   let dampeningFactor;
 
   if (distanceToPlayer < extraSpacing + 1) {
@@ -788,7 +847,7 @@ const updateHealth = (playerId, damage) => {
 }
 
 const createFloatingHp = (playerId) => {
-/*
+
   let playerObject = playerList[playerIdToIndex.get(playerId)];
 
   const map = new THREE.TextureLoader().load( '/texture/hpBar.png' );
@@ -805,15 +864,15 @@ const createFloatingHp = (playerId) => {
 
   playerObject.model.add(sprite);
   return sprite;
-*/
+
 }
 
 const updateFloatingHp = (hp, playerId) => {  
-/*
+
   const hpRatio = hp / 100; //100 = maxHp, wird später noch geändert, soll nicht hardgecoded sein
 
   playerList[playerIdToIndex.get(playerId)].hpModel.scale.set(hpRatio * 1.5, 0.3, 1);
-*/
+
 }
 
 const updateOwnHp = () => {
@@ -927,21 +986,38 @@ const recalcPlayerMap = () => {
 //createGrid();
 
 //moveObject(camera, [3, 1, -3]);
-moveObject(dilight, [-20, 10, -20]);
+moveObject(dilight, [-20, 40, 44.19]);
 /*const helper = new THREE.CameraHelper( dilight.shadow.camera );
 scene.add( helper );*/
 //dilight.lookAt(new THREE.Vector3(0, 0, 0));
 dilight.castShadow = true;
 dilight.shadow.mapSize.width = 2048;
 dilight.shadow.mapSize.height = 2048;
+moveObject(dilightTarget, [[35, 0, 30]])
+dilight.target.position.set(35, 0, 30);
+dilight.target.updateMatrixWorld();
+dilight.shadow.normalBias = 0.2; //shadow doesn't have stripes with that
+
+moveObject(spotLight, [25.04, 13.82, 22.98]);
+spotLight.target.position.set(25.04, 0, 22.98);
+spotLight.target.updateMatrixWorld();
+
+spotLight.angle = 0.4;
+spotLight.penumbra = 0.7;
+
+//const spotLightHelper = new THREE.SpotLightHelper( spotLight );
+//scene.add( spotLightHelper );
+
 
 //ende debugging
 
 
 //raycasts for easy creation of colliders
 function rayChecker(startVec, dirVec, near, far) {
+
   let raycaster = new THREE.Raycaster();
   raycaster.set(startVec, dirVec, near, far);
+  raycaster.layers.set(1);
   const intersects = raycaster.intersectObjects(scene.children);
 
   if (intersects.length > 0) {

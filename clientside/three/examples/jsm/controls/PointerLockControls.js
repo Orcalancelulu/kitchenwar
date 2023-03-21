@@ -41,15 +41,28 @@ class PointerLockControls extends EventDispatcher {
 			const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
 
 			let bodyElement = getBodyElement();
+			let shouldMoveBody = true;
+			if (bodyElement == undefined) shouldMoveBody = false;
+
+
+			if(shouldMoveBody) {
+				_eulerBody.setFromQuaternion(bodyElement.quaternion );
+
+				_eulerBody.y -= movementX * 0.002 * scope.pointerSpeed;
+				_eulerBody.x = 0;
+				
+				bodyElement.quaternion.setFromEuler(_eulerBody);
+
+				funcToCallOnMove(bodyElement.quaternion)
+
+			}
 
 			//console.log(movementX);
 			_euler.setFromQuaternion( camera.quaternion );
 			//console.log(bodyElement.quaternion);
-			_eulerBody.setFromQuaternion(bodyElement.quaternion );
+
 			
 
-			_eulerBody.y -= movementX * 0.002 * scope.pointerSpeed;
-			_eulerBody.x = 0;
 
 			_euler.y -= movementX * 0.002 * scope.pointerSpeed;
 			_euler.x -= movementY * 0.002 * scope.pointerSpeed;
@@ -59,10 +72,8 @@ class PointerLockControls extends EventDispatcher {
 
 
 			camera.quaternion.setFromEuler( _euler );
-			bodyElement.quaternion.setFromEuler(_eulerBody);
 
 			//console.log("should be moving");
-			funcToCallOnMove(bodyElement.quaternion)
 
 
 
