@@ -31,7 +31,7 @@ let moveVector = [0, 0];
 let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
 
 //movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger) speedmode
-let movementDataPresets = [{movementType: 0, moveSpeed: 0.15, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
+let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
 
 let movementData = movementDataPresets[0];
 
@@ -200,27 +200,27 @@ const createSkybox = async () => {
   */
 }
 
-function applyChangesToAllChildren(objects, layer, alpha) {
+function applyChangesToAllChildren(objects, layer, alpha, shouldCastShadows) {
   objects.forEach((object) => {
     //changes here
     
     object.layers.set(layer);
+
     if (object.name.indexOf("transparent") > -1) {
       object.material.transparent = true;   
       object.material.opacity = alpha;  
-      object.castShadow = false;
-      object.castShadow = false;
     } else {
-      object.castShadow = true;
+      if (shouldCastShadows == undefined) shouldCastShadows = false;
+      object.castShadow = shouldCastShadows;
       object.receiveShadow = true;
       
     }
 
     if (object.children.length != 0) {
-      applyChangesToAllChildren(object.children, layer, alpha)
+
+      applyChangesToAllChildren(object.children, layer, alpha, shouldCastShadows)
     }
   })
-
 }
 
 const addGltfToScene = () => {
@@ -232,7 +232,7 @@ const addGltfToScene = () => {
     gltf.scene.castShadow = true;
     gltf.scene.receiveShadow = true;
     gltf.scene.layers.set(1);
-    applyChangesToAllChildren(gltf.scene.children, 1, 0.2); //layer 1 means map
+    applyChangesToAllChildren(gltf.scene.children, 1, 0.2, true); //layer 1 means map
     //mixer = new THREE.AnimationMixer(gltf.scene);
     //let action = mixer.clipAction(gltf.animations[0]);
 
@@ -330,32 +330,45 @@ const checkPlayerCollision = (afterMove) => {
 
 
       let colliding = doBoxesCollide(playerBounds, bounds);
-      if (colliding) {
-        let disBounds = [];
-        for (var i = 0; i<3; i++) {
-          disBounds[2*i] = Math.abs(bounds[2*i]-playerBounds[2*i+1]);
-          disBounds[2*i+1] = Math.abs(bounds[2*i+1]-playerBounds[2*i]);
-        }
-        let smallestDis = Math.min(...disBounds);
-        let index = disBounds.indexOf(smallestDis);
-        if (index == 3) { //landed / standing on something
-          playerList[0].isGrounded = true;
-        } else if (index == 0 || index == 1) {
-          //touching in x axis, velocity of x axis is set to 0
-          playerList[0].velocity.x = 0;
-        } else if (index == 4 || index == 5) {
-          //touching in z axis,velocity of z axis is set to 0
-          playerList[0].velocity.z = 0;
-        }
-        let moveMap = whereToMoveAtCollision[index]
-        bounds[index] +=  moveMap[6];
+      if (colliding) { //part of player is inside object
+        if (objectToCheck.actionOnCollision == "collide" || objectToCheck.actionOnCollision == undefined) {
+          let disBounds = [];
+          for (var i = 0; i<3; i++) {
+            disBounds[2*i] = Math.abs(bounds[2*i]-playerBounds[2*i+1]);
+            disBounds[2*i+1] = Math.abs(bounds[2*i+1]-playerBounds[2*i]);
+          }
+          let smallestDis = Math.min(...disBounds);
+          let index = disBounds.indexOf(smallestDis);
+          if (index == 3) { //landed / standing on something
+            playerList[0].isGrounded = true;
+          } else if (index == 0 || index == 1) {
+            //touching in x axis, velocity of x axis is set to 0
+            playerList[0].velocity.x = 0;
+          } else if (index == 4 || index == 5) {
+            //touching in z axis,velocity of z axis is set to 0
+            playerList[0].velocity.z = 0;
+          }
+          let moveMap = whereToMoveAtCollision[index]
+          bounds[index] +=  moveMap[6];
 
-        let newPos = [afterMove[0] * moveMap[3] + bounds[index] * moveMap[0] + playerSize[0] * 0.5 * moveMap[0] * moveMap[7], afterMove[1] * moveMap[4] + bounds[index] * moveMap[1] + playerSize[1] * 0.5 * moveMap[1] * moveMap[7], afterMove[2] * moveMap[5] + bounds[index] * moveMap[2] + playerSize[2] * 0.5 * moveMap[2] * moveMap[7]];
-        
-        playerList[0].position = newPos;
-        afterMove = newPos; //falls man an mehreren objekten gleichzeitig ankommt, soll man auch von beiden beeinflusst werden. Somit muss die neue aftermove festgelegt werden
-        
-        moveObject(playerList[0].model, newPos);
+          let newPos = [afterMove[0] * moveMap[3] + bounds[index] * moveMap[0] + playerSize[0] * 0.5 * moveMap[0] * moveMap[7], afterMove[1] * moveMap[4] + bounds[index] * moveMap[1] + playerSize[1] * 0.5 * moveMap[1] * moveMap[7], afterMove[2] * moveMap[5] + bounds[index] * moveMap[2] + playerSize[2] * 0.5 * moveMap[2] * moveMap[7]];
+          
+          playerList[0].position = newPos;
+          afterMove = newPos; //falls man an mehreren objekten gleichzeitig ankommt, soll man auch von beiden beeinflusst werden. Somit muss die neue aftermove festgelegt werden
+          
+          moveObject(playerList[0].model, newPos);
+        } else if (objectToCheck.actionOnCollision == "applyForce") { //for example jump pads
+          //console.log("on jump pad");
+          if (playerList[0].isGrounded) {
+            
+            playerList[0].velocity = new THREE.Vector3(...objectToCheck.forceVector);
+
+            playerList[0].isGrounded = false;
+          }
+
+        } else if (objectToCheck.actionOnCollision == "stairs") { //stairs need special collider
+
+        }
       }
     });
   });
@@ -379,8 +392,8 @@ const loadBetterModel = (modelPath, playerId, pos, shouldCreateCameraControl, ro
   loader.load(modelPath, function ( gltf ) {
     gltf.scene.scale.set(0.2, 0.2, 0.2);
     scene.add(gltf.scene);
-    //console.log(gltf.scene)
-    //applyChangesToAllChildren(gltf.scene.children, 0, 1);
+
+    applyChangesToAllChildren(gltf.scene.children, 0, 1, false);
 
     
     moveObject(gltf.scene, pos);
@@ -459,7 +472,7 @@ const wantToJump = () => {
   //console.log(playerList[0].isGrounded);
   if (!playerList[0].isGrounded) return;
   playerList[0].isGrounded = false;
-  playerList[0].velocity.add(new THREE.Vector3(0, 0.3, 0)); //speedmode
+  playerList[0].velocity.add(new THREE.Vector3(0, 0.1, 0)); //speedmode
   playerList[0].model.position.y += 0.01;
 }
 
@@ -882,7 +895,7 @@ const updateOwnHp = () => {
 }
 
 const createObject = (object) => {
-  if (object.shape == "cube") {
+  if (object.shape == "cube") { //only for debugging used
     const geometry = new THREE.BoxGeometry(object.size[0], object.size[1], object.size[2]);
     const material = new THREE.MeshStandardMaterial( {color: object.color} );
     const cube = new THREE.Mesh( geometry, material );
@@ -891,7 +904,7 @@ const createObject = (object) => {
     cube.receiveShadow = true;
     moveObject(cube, object.position);
 
-  } else if(object.shape == "plane") {    
+  } else if(object.shape == "plane") { //only for debugging used
     const geometry = new THREE.PlaneGeometry(object.size[0], object.size[1]);
     const material = new THREE.MeshStandardMaterial( {color: 0x707070} );
     
@@ -901,6 +914,16 @@ const createObject = (object) => {
     plane.castShadow = false;
     moveObject(plane, object.position);
     plane.lookAt(new THREE.Vector3(object.orientation[0], object.orientation[1], object.orientation[2]));
+
+  } else if(object.shape == "forcePad") { 
+    const loader = new GLTFLoader();
+    loader.load("models/jump_pad.glb", function ( gltf ) {
+      gltf.scene.scale.set(0.4, 0.4, 0.4);
+      scene.add(gltf.scene);
+
+      applyChangesToAllChildren(gltf.scene.children, 0, 1, false); //for shadows
+      moveObject(gltf.scene, object.position);
+    })
 
   } else {
     console.log("can't create object");
