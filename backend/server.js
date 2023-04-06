@@ -9,7 +9,7 @@ let isPhysicsLoopActive = false;
 let PhysicsLoop;
 let projectileList = [];
 
-let physicsLoopWaitTime = 50;
+let physicsLoopWaitTime = 16; //16 => 60 times per second
 
 const clients = new Map();
 
@@ -21,6 +21,7 @@ let menueSpawnPos = [-40, 5, -40];
 let characterMainWeaponType = [0, 1, 1, 1, 2]; //this means, at index 0 (kettle) has type 0, index 1 (toaster) has type 1, index 2 (knifeblock) has type 1, index 3 (mixer) has type 1, index 4 (coffee can) has type 2
 let mainAttackMaxAmmoCapacity = [100, 2, 6, 2, 20] //how much ammunition / slots / power each character has
 let timeBetweenShots = [[0, 0.5], [1, 8], [2, 50], [2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
+
 
 let playerSize = [0.25, 1, 0.25];
 
@@ -81,9 +82,11 @@ function calcPhysics() {
   if (projectileList.length < 1) {
     clearInterval(PhysicsLoop); //if there are no more projetiles, the loop will end
     isPhysicsLoopActive = false;
+    return;
   }
   
-  for (var i = 0; i<projectileList.length; i++) { //loop through all projectiles on the map
+  for (var i = projectileList.length-1; i > -1; i -= 1) { //loop through all projectiles on the map
+    //console.log(i);
     const projectile = projectileList[i];
     let position = projectile.position;
     let velocity = projectile.velocity;
@@ -96,28 +99,39 @@ function calcPhysics() {
     //console.log(position);
 
     //check for collisions
+    let shouldContinue = false;
     Object.keys(mapObject.objects).forEach((key) => {
       let object = mapObject.objects[key];
 
-      if(isPointInCube(position, object)) { //if projectile hits a part of the map, it gets destroyed or blows up
+      if(isPointInCube(position, object) || position[1] < -5) { //if projectile hits a part of the map, it gets destroyed or blows up
 
         projectileList.splice(i, 1);
-        console.log("deleted projectile");
+        //console.log("deleted projectile");
+        position[1] = 0; //not actually moving it, just so the forEach loop of the mapObjects does not get true every time
+        shouldContinue = true;
       }
     });
+    if (shouldContinue) continue; //so the player wont get checked, if the projectile is already destroyed
+
 
     //check if player is hit
-    if(projectileList[i] == undefined) break; //only check, if projectile is still there
-
     clientList.forEach((player) => {
-      let distance = getDistanceBetweenArrayVector(player.position, position);
-
-      if (distance < projectileList[i].minDistanceToHit) { //if the distance to the player is to small (so projectile touches player), !!here!!, muss besser gemacht werden,  jetzt wird Entfernung nur von Mittelpunkt gemessen, nicht von den Ecken des Spielers
-        //player is hit
-        sendAll({header: "playerHit", data: {playerId: player.id, damage: projectileList[i].constants.damage}}); //!!here!!, change this for splash area damage
-
-        projectileList.splice(i, 1); //delete projectile after hit
-      }
+      if (projectileList.length != 0){ //if a player gets hit with the only projectile on the scene, projectileList will be empty but the forEach would still go on.
+        let distance = getDistanceBetweenArrayVector(player.position, position);
+        //console.log(projectileList.length);
+        //console.log(distance)
+        if (distance < projectileList[i].constants.minDistanceToHit && projectileList[i].constants.playerId != player.id) { //if the distance to the player is to small (so projectile touches player), !!here!!, muss besser gemacht werden,  jetzt wird Entfernung nur von Mittelpunkt gemessen, nicht von den Ecken des Spielers
+          //player is hit
+          //console.log("player Hit")
+          clientList[clients.get(player.id)].hp -= projectileList[i].constants.damage;
+          sendAll({header: "playerHit", data: {playerId: player.id, damage: projectileList[i].constants.damage}}); //!!here!!, change this for splash area damage
+          
+          if (clientList[clients.get(player.id)].hp <= 0) { //if the player is now dead, the playder should die
+            sendAll({header: "putToStandby", data: {cause: "death", playerId: player.id}});
+          }
+          projectileList.splice(i, 1); //delete projectile after hit
+        }
+      }       
     })
   }
 
@@ -148,7 +162,7 @@ function getBoxBounds(position, dimensions) {
   return box;
 }
 
-function shootSlotAmmunition(characterId, playerId) {
+function shootSlotAmmunition(characterId, playerId, velocityVector) {
 
   let mainAttackInfo = clientList[clients.get(playerId)].mainAttackInfo;
 
@@ -174,9 +188,10 @@ function shootSlotAmmunition(characterId, playerId) {
 
         clientList[clients.get(playerId)].mainAttackInfo.slotsInfo[i] = Date.now();
         clientList[clients.get(playerId)].mainAttackInfo.timeStampOfLastShot = Date.now();
-        console.log(playerId + " is shooting with slot ammunition as character " + characterId);
+        //console.log(playerId + " is shooting with slot ammunition as character " + characterId);
         //shoot Physical Projectile
-        addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: [0.01, 0.01, 0], id: Date.now() + Math.random(), constants: {airDragFactor: 0, gravityFactor: 0.00001, damage: 100, damageArea: 3, projectileType: 1, minDistanceToHit: 0.1}});
+        //console.log(velocityVector);
+        addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: velocityVector, id: Date.now() + Math.random(), constants: {playerId: playerId, airDragFactor: 0, gravityFactor: 0.00001, damage: 100, damageArea: 3, projectileType: 1, minDistanceToHit: 1}});
 
       }
 
@@ -273,6 +288,7 @@ function client(id, ws, position, model, rotation, hp) {
   this.isInGame = false;
   this.characterId = 0;
   this.mainAttackInfo = undefined;
+  this.velocity = [0, 0, 0]
 }
 
 //check if message from client is JSON data
@@ -316,12 +332,12 @@ function getSpawnPos() { //calculates spawn pos farthest away from any player
   let distanceToSpawn = {distance: 0, pos: [0, 0, 0]}
 
   mapObject.possibleSpawnPos.forEach((pos) => {
-    console.log(pos);
+    //console.log(pos);
     minDistance.distance = 1000;
     clientList.forEach((player) => {
       if (player.isInGame) {
         let currentDistance = getDistanceBetweenArrayVector(player.position, pos)
-        console.log(currentDistance);
+        //console.log(currentDistance);
         if (currentDistance < minDistance.distance) {
           minDistance.distance = currentDistance;
         }
@@ -378,6 +394,8 @@ wss.on('connection', (ws) => {
       //ein spieler hat sich bewegt, neue position wird gespeichert und an den anderen spieler mitgeteilt
       //später muss hier noch anti cheat überprüfung rein.
       myclient.position = message.data.position;
+      myclient.velocity = message.data.velocity;
+
       sendAll({header: "walkevent", data: {id: id, position: message.data.position, isGrounded: message.data.isGrounded}});
       moveObject(clientList[clients.get(id)].model, message.data.position);
 
@@ -401,21 +419,28 @@ wss.on('connection', (ws) => {
       } else if (attackType == 1) { //projectiles slot ammunition (toaster, mixer, knifeblock) (one time shoot)
 
         //try to shoot with slot ammunition
-        shootSlotAmmunition(message.data.characterId, id); 
+        if (message.data.velocityFactor > 1) message.data.velocityFactor = 1; //anti cheat
 
-        //press and shoot once mode
-        //search for loaded ammunition slot
-          //if found -> shoot and set timer for this slot
-          //if no loaded ammunition slot left -> do nothing
+        let maxVelocityVector = [0, 0.01, 0];
+
+        if (message.data.characterId == 1) {
+          let constFactor = 0.01;
+          let factor = constFactor * message.data.velocityFactor;
+          let ownSpeedFactor = 0.1;
+
+          maxVelocityVector = [-message.data.rotationBody[0] * factor, 1 * constFactor, -message.data.rotationBody[2] * factor]; //factor does not affect y axis, therefore, the projectile will follow a steep path with low factor -> no melee attack possible 
+          maxVelocityVector = [maxVelocityVector[0] + myclient.velocity[0] * ownSpeedFactor, maxVelocityVector[1] +  myclient.velocity[1] * ownSpeedFactor, maxVelocityVector[2] +  myclient.velocity[2] * ownSpeedFactor];
+        } 
+        shootSlotAmmunition(message.data.characterId, id, maxVelocityVector);
 
       } else {
         console.log("attack type not found");
       }
-
+      /*
       //spieler schiesst irgendwo hin
       let startVec = new THREE.Vector3(message.data.position[0], message.data.position[1], message.data.position[2]);
       let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
-      rayChecker(startVec, dirVec, 0.01, 30);
+      rayChecker(startVec, dirVec, 0.01, 30);*/
 
     } else if (message.header == "joiningGame") {
       //spieler war vorher noch im menü, jetzt aber im game mit charakter
@@ -424,7 +449,7 @@ wss.on('connection', (ws) => {
 
       clientList[clients.get(id)].isInGame = true;
 
-      console.log(pos);
+      //console.log(pos);
       sendAll({header: "playerJoined", data: {position: pos, playerId: id, characterId: myclient.characterId}});
     } else if (message.header == "changedCharacter" ) {
       clientList[clients.get(id)].characterId = message.data.characterId;

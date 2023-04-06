@@ -233,6 +233,11 @@ document.body.addEventListener("click", (event)=> {
   
   let lookVector = new THREE.Vector3;
   camera.getWorldDirection(lookVector);
+  lookVector = lookVector.normalize(); 
+
+  let bodyVector = new THREE.Vector3;
+  playerList[0].model.getWorldDirection(bodyVector);
+  bodyVector = bodyVector.normalize();
   //let angleCamera = new THREE.Euler(0, 0, 0, "YXZ");
 
   //let eulerList = [angleCamera.setFromQuaternion(camera.quaternion).x*57.2957, angleCamera.setFromQuaternion(camera.quaternion).y*57.2957, angleCamera.setFromQuaternion(camera.quaternion).z*57.2957];
@@ -240,7 +245,8 @@ document.body.addEventListener("click", (event)=> {
   //lookVector = new THREE.Vector3(camera.position.x - playerList[0].model.position.x, camera.position.y - playerList[0].model.position.y, camera.position.z - playerList[0].model.position.z).normalize();
   //console.log(lookVector);
   //rayChecker(camera.position, lookVector, 0.01, 50); //debugging
-  ws.send(JSON.stringify({header: "mainAttack", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId}}));
+  console.log(bodyVector);
+  ws.send(JSON.stringify({header: "mainAttack", data: {rotationBody: [bodyVector.x, bodyVector.y, bodyVector.z], rotationCamera: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId, velocityFactor: 1}}));
   
 })
 
@@ -762,7 +768,7 @@ const applyPhysics = () => {
   //hier 3rd person einbauen
   //moveObject(camera, [playerList[0].position[0], playerList[0].position[1]+playerSize[1]*0.25, playerList[0].position[2]]);
 
-  ws.send(JSON.stringify({header: "walkevent", data: {position: playerList[0].position, rotation: [playerList[0].model.quaternion.x, playerList[0].model.quaternion.y, playerList[0].model.quaternion.z, playerList[0].model.quaternion.w], isGrounded: false}}))
+  ws.send(JSON.stringify({header: "walkevent", data: {position: playerList[0].position, velocity: [playerList[0].velocity.x, playerList[0].velocity.y, playerList[0].velocity.z], rotation: [playerList[0].model.quaternion.x, playerList[0].model.quaternion.y, playerList[0].model.quaternion.z, playerList[0].model.quaternion.w], isGrounded: false}}))
 }
 
 //rekursive Funktion um Bezierkurve (3d) zu bekommen anhand von den Leitpunkten und faktor (wo genau auf der Kurve man den Punkt will)
@@ -1356,7 +1362,6 @@ ws.onmessage = (event) => {
     //console.log("player: " + message.data.playerId + " recieved " + message.data.damage + " damage");
     updateHealth(message.data.playerId, message.data.damage);
 
-
   } else if (message.header == "playerJoined") {
     console.log("Player joined the game: " + message.data.characterId);
     putInGame(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0, message.data.position, message.data.characterId);
@@ -1364,6 +1369,7 @@ ws.onmessage = (event) => {
   } else if (message.header == "putToStandby") {
     console.log("Putting to standby because: " + message.data.cause);
     putToStandby(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0);
+
   } else if (message.header == "updateOfProjectiles") {
     //message.data.projectileList has all projectiles in the scene
     updateProjectiles(message.data.projectileList);
