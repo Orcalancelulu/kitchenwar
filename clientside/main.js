@@ -2,7 +2,12 @@ import * as THREE from 'three';
 import {PointerLockControls} from "PointerLockControls"
 import { GLTFLoader } from 'GLTFLoader';
 
+import Stats from '/three/examples/jsm/libs/stats.module.js' //stats for fps and memory... #debugging
 
+
+
+const stats = Stats() // stats
+document.body.appendChild(stats.dom) //stats
 
 
 const scene = new THREE.Scene();
@@ -10,6 +15,9 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 camera.layers.enable(1); //layer 1 is map object
 
 let renderer;
+
+let time = new THREE.Clock(); //used for deltaTime
+let deltaTime = 0;
 
 let mapSize = 120; //mit einer mapSize von 120 * 120 und einer Chunkgrösse von 12*12 gibt es 10*10 Chunks --> 100 Chunks insgesamt
 let chunkSize = 12;
@@ -50,6 +58,11 @@ let standByPos = [1, 20, 1];
 let wantedDistanceToPlayer = 4;
 let maxDistanceToPlayer = 8;
 
+let projectileList = [];
+
+
+let particleGeo = new THREE.BufferGeometry(); //debugging
+
 
 
 //erste 3 Zahlen für bounds, nächste 3 für playerPosition, nächste für extra abstand, damit man im nächsten frame nicht schon wieder drinn steckt und die letzte ziffer, damit man zurück zum rand des objekts kommt
@@ -65,7 +78,105 @@ let whereToMoveAtCollision = {
 
 
 
+
+// modulo zigzag funktion machen, von 0-1 immer wieder
+// https://github.com/mrdoob/three.js/blob/master/examples/webgl_buffergeometry_custom_attributes_particles.html
+// anstatt size einfach position ändern
+// anhand von vorbestimmter form presets auswählen (cone speedy, sphere floating fixed or random pos)
+
+
 //anfang debugging
+
+
+function particleTesting() {
+
+  let uniforms = {
+
+    pointTexture: { value: new THREE.TextureLoader().load( 'texture/wasserdampf.png' ) }
+
+  };
+
+  const shaderMaterial = new THREE.ShaderMaterial( {
+
+    uniforms: uniforms, //attribute float size; varying vec3 vColor;
+    vertexShader: `
+    
+    attribute float size; 
+    varying vec3 vColor;
+
+    void main() {
+
+      
+
+      vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+
+      gl_PointSize = 0.7 * ( 300.0 / -mvPosition.z );
+
+      gl_Position = projectionMatrix * mvPosition;
+
+    }`, //varying vec3 vColor;
+    fragmentShader: `	
+    uniform sampler2D pointTexture;
+
+    varying vec3 vColor;
+
+    void main() {
+
+      gl_FragColor = vec4( vec3(1.0, 1.0, 1.0), 1.0 );
+
+      gl_FragColor = gl_FragColor * texture2D( pointTexture, gl_PointCoord );
+
+    }`,
+
+    
+    
+    transparent: true,
+    depthWrite: false
+    //vertexColors: true
+
+  } );
+
+
+  const particleCount = 100;
+
+  
+
+  const positions = [];
+	const colors = [];
+	const sizes = [];
+
+  const angles = [];
+  const timeDisplacement = []; //so each particle starts at another point in the animation
+
+  let radius = 0.1;
+
+  for (var i = 0; i<particleCount; i++) {
+    let angle = Math.random()*2*3.1415
+    let cos = Math.cos(angle);
+    let sin = Math.sin(angle);
+
+    angles.push(0);
+    angles.push(cos * radius * Math.random());
+    angles.push(sin * radius * Math.random());
+
+    timeDisplacement.push(Math.random()*5000); //0 - 5 seconds displacement, most animations only last a second or two
+
+    positions.push(0); //points are getting calculated in the particle animation, not here, therefore just placeholder 0
+		positions.push(0);
+		positions.push(0);
+  } 
+
+  particleGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+  particleGeo.setAttribute( 'angles', new THREE.Float32BufferAttribute( angles, 3 ) );
+  particleGeo.setAttribute( 'timeDisplacement', new THREE.Float32BufferAttribute( timeDisplacement, 1 ) );
+
+
+  let particleSystem = new THREE.Points( particleGeo, shaderMaterial);
+  //particleSystem.receiveShadow = true;
+
+  scene.add( particleSystem );
+  moveObject(particleSystem, [19.3, 2, 20.05]);
+}
 
 function getCoordsOfRaycast(axis) {
   let lookVector = new THREE.Vector3;
@@ -110,6 +221,16 @@ function takeCoordsAndPrintOut() {
 
 document.body.addEventListener("click", (event)=> {
   if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
+
+  //Player wants to use main attack
+  
+  //attack modes: 
+    // - ammunition bar wich refills at a certain speed (area damage, like flamethrower) //server side difficult
+    // - slot ammunition (projectile) (toaster, blender) //server side difficult
+    // - normal machine gun (hit scan) with reload once its emtpy //server side easy to do
+
+
+  
   let lookVector = new THREE.Vector3;
   camera.getWorldDirection(lookVector);
   //let angleCamera = new THREE.Euler(0, 0, 0, "YXZ");
@@ -119,8 +240,8 @@ document.body.addEventListener("click", (event)=> {
   //lookVector = new THREE.Vector3(camera.position.x - playerList[0].model.position.x, camera.position.y - playerList[0].model.position.y, camera.position.z - playerList[0].model.position.z).normalize();
   //console.log(lookVector);
   //rayChecker(camera.position, lookVector, 0.01, 50); //debugging
-
-  ws.send(JSON.stringify({header: "attacking", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z]}}))
+  ws.send(JSON.stringify({header: "mainAttack", data: {rotation: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId}}));
+  
 })
 
 let amlight = new THREE.AmbientLight(0xFFFFFF, 0.8);
@@ -153,6 +274,7 @@ function player (id, position, model, hp, rotation, walkVector) {
   this.isWalking = false;
   this.hp = hp; 
   this.isOnStandby = true;
+  this.characterId = 0;
 }
 
 
@@ -162,6 +284,8 @@ export function changeSelectedCharacter(characterId) {
   if (isInGame) return;
 
   changeToCharacterMenu(); //menu goes back to home menu
+
+  playerList[0].characterId = characterId;
 
   //change movement presets (speed, sort of movement)
   movementData = movementDataPresets[characterId];
@@ -387,7 +511,7 @@ const createPlayerModel = (pos) => {
 }
 
 const loadBetterModel = (modelPath, playerId, pos, shouldCreateCameraControl, rotation) => {
-  
+  console.log(modelPath);
   const loader = new GLTFLoader();
   loader.load(modelPath, function ( gltf ) {
     gltf.scene.scale.set(0.2, 0.2, 0.2);
@@ -619,7 +743,7 @@ const applyPhysics = () => {
   if (movementData.movementType == 0) {
     playerList[0].velocity.x += playerList[0].velocity.x * -dampening; //keine ahnung wie viel #debugging
     playerList[0].velocity.z += playerList[0].velocity.z * -dampening; //keine ahnung wie viel #debugging  
-  } else if (movementData.movementType == 1) {
+  } else if (movementData.movementType == 1 && playerList[0].isGrounded) {
     
     let lookVector = new THREE.Vector3();
     playerList[0].model.getWorldDirection(lookVector);
@@ -759,7 +883,35 @@ function moveSmoothCamera() {
 
 }
 
+function updateTestParticles() {
+  let positions = particleGeo.attributes.position.array;
+  let angles = particleGeo.attributes.angles.array;
+  let timeDisplacement = particleGeo.attributes.timeDisplacement.array;
+
+  const coneLength = 2;
+  const particleSpeed = 0.002;
+  const secondCircleSize = 10; //1 means twice as big, 0.5 = same size
+  let currentTime = Date.now();
+  
+  //console.log(timeFactor);
+  for (var i = 0; i< positions.length/3; i++) {
+    let timeFactor = (particleSpeed * (currentTime + timeDisplacement[Math.floor(i/3)]))%1; //gives a number between 0 and 1, triangle graph
+    
+    positions[3*i + 0] = timeFactor * coneLength;
+    
+    positions[3*i + 1] = angles[3*i + 1] *  timeFactor * secondCircleSize + angles[3*i + 1];
+    positions[3*i + 2] = angles[3*i + 2] *  timeFactor * secondCircleSize + angles[3*i + 2];
+    //positions[3*i + 2] += sideSpeed * ;
+  }
+
+  particleGeo.attributes.position.needsUpdate = true;
+
+}
+
+
+
 function animate() {
+  deltaTime = time.deltaTime;
   requestAnimationFrame(animate);
   checkInput();
   applyPhysics();
@@ -767,9 +919,16 @@ function animate() {
 
   updateCameraFly();
   moveSmoothCamera();
+  
+  stats.update() //stats
+
+
+  updateTestParticles();
  
   renderer.render(scene, camera);
 };
+
+
 
 const resize = () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1004,6 +1163,16 @@ const recalcPlayerMap = () => {
   });
 }
 
+function getIdsFromObjectList(objectList, keyToFind) {
+  let keyList = [];
+  //console.log(objectList);
+  objectList.forEach((objectInList) => {
+    if (objectInList[keyToFind] == undefined) return;
+    keyList.push(objectInList[keyToFind])
+  })
+  return keyList
+}
+
 
 //anfang debugging
 //createGrid();
@@ -1035,6 +1204,71 @@ spotLight.penumbra = 0.7;
 //ende debugging
 
 
+function createNewProjectile(position, projectileType, id) {
+  //console.log(id);
+  return {position: position, type: projectileType, id: id, model: createProjectileModel(projectileType)};
+}
+
+function createProjectileModel(projectileType) {
+  if (projectileType == 0) {
+
+  } else if (projectileType == 1) {
+    const geometry = new THREE.SphereGeometry( 0.2, 8, 4);
+    const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
+    const sphere = new THREE.Mesh( geometry, material );
+    scene.add( sphere );
+    return sphere;
+  }
+}
+
+function updateProjectiles(serverProjectileList) {
+  //forEach item in projectileList, check if it is in the copy of list, if yes delete it from the copied list, if no, create it in the actual list. If there are items left in copied list, delete them in the actual list
+
+  //generateIdList
+  let serverIdsList = getIdsFromObjectList(serverProjectileList, "id");
+  let projectileIdsList = getIdsFromObjectList(projectileList, "id");
+
+
+  //list for all projectiles that should be deleted
+  let projectileIdsListCopy = projectileIdsList;
+
+
+  for(var i = serverIdsList.length-1; i>-1; i -= 1) { //starts from end of the list, so items in projectileIdsListCopy can be deleted easily
+    let id = serverIdsList[i];
+
+    let indexOfFoundId = projectileIdsList.indexOf(id)
+    if (indexOfFoundId > -1) {
+      //projectile is already in list
+
+      //change values in actual list
+      projectileList[indexOfFoundId].position = serverProjectileList[i].position;
+      moveObject(projectileList[indexOfFoundId].model, projectileList[indexOfFoundId].position);
+      
+      //delete item from copylist
+      projectileIdsListCopy.splice(indexOfFoundId, 1);
+
+    } else {
+      //projectile is not yet in list
+
+      //create and add item in list
+      projectileList.push(createNewProjectile(serverProjectileList[i].position, serverProjectileList[i].constants.projectileType, id))
+      console.log("created: " + id);
+    }
+  }
+  //all projectiles left in projectileIdsListCopy should be deleted (maybe they hit a player or object)
+  for (var i = projectileList.length-1; i > -1; i -= 1) {
+    let projectileToCheck = projectileList[i];
+
+    if (projectileIdsListCopy.indexOf(projectileToCheck.id) > -1) {
+      //this projectile should be deleted
+      scene.remove(projectileList[i].model);
+      console.log("Deleted: "+projectileList[i].id + "because of: " + projectileIdsListCopy);
+      projectileList.splice(i, 1);
+    }
+  }
+}
+
+
 //raycasts for easy creation of colliders
 function rayChecker(startVec, dirVec, near, far) {
 
@@ -1061,6 +1295,8 @@ function rayChecker(startVec, dirVec, near, far) {
 }
 
 addGltfToScene();
+
+particleTesting();
 
 /*end of THREE code
 
@@ -1128,5 +1364,8 @@ ws.onmessage = (event) => {
   } else if (message.header == "putToStandby") {
     console.log("Putting to standby because: " + message.data.cause);
     putToStandby(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0);
-  }
+  } else if (message.header == "updateOfProjectiles") {
+    //message.data.projectileList has all projectiles in the scene
+    updateProjectiles(message.data.projectileList);
+  } 
 }

@@ -5,14 +5,22 @@ const wss = new WebSocket.Server({ port: 7031 });
 let clientList = [];
 const scene = new THREE.Scene();
 
-//let id;
+let isPhysicsLoopActive = false;
+let PhysicsLoop;
+let projectileList = [];
+
+let physicsLoopWaitTime = 50;
+
 const clients = new Map();
 
 const raycaster = new THREE.Raycaster();
 
-//zum debuggen mal hardcoded. später soll es noch aus einem file kommen
+//zum testen mal hardcoded. später soll es noch aus einem file kommen
 let menueSpawnPos = [-40, 5, -40];
 
+let characterMainWeaponType = [0, 1, 1, 1, 2]; //this means, at index 0 (kettle) has type 0, index 1 (toaster) has type 1, index 2 (knifeblock) has type 1, index 3 (mixer) has type 1, index 4 (coffee can) has type 2
+let mainAttackMaxAmmoCapacity = [100, 2, 6, 2, 20] //how much ammunition / slots / power each character has
+let timeBetweenShots = [[0, 0.5], [1, 8], [2, 50], [2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
 
 let playerSize = [0.25, 1, 0.25];
 
@@ -29,7 +37,7 @@ let mapObject = {
     apFo2913: {position: [36, 0.5, 27.65], size: [0.5, 0.5, 0.5], actionOnCollision: "applyForce", forceVector: [0.1, 0.28, 0], isVisible: true, shape: "forcePad"},
     apFo8276: {position: [17.93, 0.5, 27.65], size: [0.5, 0.5, 0.5], actionOnCollision: "applyForce", forceVector: [-0.1, 0.28, 0], isVisible: true, shape: "forcePad"},
 
-    //collider list, objects with collision
+    //collider list, objects with collision (alles noch hardcoded, wird später noch anders)
     coll5885: {position: [27.51449182990683,2.5356705792056027,22.56412559449208], size: [9.743382639954348, 4.407726812246092, 4.209177619228122]},
     coll4671: {position: [27.51449182990683,2.5356705792056027,33.34101015030873], size: [9.743382639954348, 4.407726812246092, 4.209177619228122]},
     coll4430: {position: [23.974475190590503,2.5593533739447154,11.069169044494629], size: [16.743707471248815, 4.455092401724317, 4.547296464443207]},
@@ -45,7 +53,7 @@ let mapObject = {
     coll7665: {position: [40.59756398200989,5.664344194923503,12.576205730438232], size: [4.5032912492752075, 10.665074043681894, 5.496389865875244]},
     coll3242: {position: [11.320777274668217,7.282411891614062,60.45180236064912], size: [2.0095622539520264, 13.901209437063013, 23.03388971705651]},
     coll2410: {position: [10.9392183083961,8.380673888717753,29.88802177257317], size: [1.2464443214077914, 16.097733431270395, 33.09040899171387]}, //wall x on west
-    coll823: {position: [13.558793645352125,2.5563001965879284,32.01962957660751], size: [4.193919338285923, 4.448986047010745, 28.82719327395897]}, //long box on west
+    coll8223: {position: [13.558793645352125,2.5563001965879284,32.01962957660751], size: [4.193919338285923, 4.448986047010745, 28.82719327395897]}, //long box on west
     coll2889: {position: [26.994206063542094,8.380673888717753,8.852614256189973], size: [22.70342458766038, 16.097733431270395, 1.1458375620450205]}, //wall z on north
     coll9383: {position: [43.19464564323425,8.380673888717753,26.665369529704144], size: [1.1458378285169601, 16.097733431270395, 22.68193773265658]}, //wall x on east
     coll3537: {position: [22.052575407408618,8.380673888717753,47.62024521827698], size: [15.393472573393575, 16.097733431270395, 1.2209582328796316]}, //part of inwall west
@@ -55,28 +63,134 @@ let mapObject = {
   } 
 }
 
-/*  cube778828: { //random id nummer
-      id: 778828,
-      shape: "cube",
-      position: [0, 1, 0],
-      size: [1.1, 1.1, 1.1], //width, height, depth
-      color: 0x0000FF, //blau
-      isVisible: true
-    },
-    cube917322: { //random id nummer
-      id: 917322,
-      shape: "cube",
-      position: [1.5, 1, 1],
-      size: [0.5, 0.5, 0.5], //width, height, depth
-      color: 0xFF0000, //rot 
-      isVisible: true
-   },
-   
-*/
-
-
-
 //fertig hardcoded
+
+function addNewProjectile(projectile) { //OnOrOff: false = turn off, true = turn on
+
+  projectileList.push(projectile);
+
+  if (!isPhysicsLoopActive){ //if loop is not started
+    //starts the loop
+    isPhysicsLoopActive = true;
+    
+    PhysicsLoop = setInterval(calcPhysics, physicsLoopWaitTime) //2 times per second
+  }
+}
+
+function calcPhysics() {
+  if (projectileList.length < 1) {
+    clearInterval(PhysicsLoop); //if there are no more projetiles, the loop will end
+    isPhysicsLoopActive = false;
+  }
+  
+  for (var i = 0; i<projectileList.length; i++) { //loop through all projectiles on the map
+    const projectile = projectileList[i];
+    let position = projectile.position;
+    let velocity = projectile.velocity;
+
+    //calculate new Position and velocity of  projectile
+    position = [position[0] + velocity[0] * physicsLoopWaitTime, position[1] + velocity[1] * physicsLoopWaitTime, position[2] + velocity[2] * physicsLoopWaitTime];
+    projectileList[i].velocity = [velocity[0], velocity[1] - projectileList[i].constants.gravityFactor * physicsLoopWaitTime, velocity[2]];
+    projectileList[i].position = position;
+
+    //console.log(position);
+
+    //check for collisions
+    Object.keys(mapObject.objects).forEach((key) => {
+      let object = mapObject.objects[key];
+
+      if(isPointInCube(position, object)) { //if projectile hits a part of the map, it gets destroyed or blows up
+
+        projectileList.splice(i, 1);
+        console.log("deleted projectile");
+      }
+    });
+
+    //check if player is hit
+    if(projectileList[i] == undefined) break; //only check, if projectile is still there
+
+    clientList.forEach((player) => {
+      let distance = getDistanceBetweenArrayVector(player.position, position);
+
+      if (distance < projectileList[i].minDistanceToHit) { //if the distance to the player is to small (so projectile touches player), !!here!!, muss besser gemacht werden,  jetzt wird Entfernung nur von Mittelpunkt gemessen, nicht von den Ecken des Spielers
+        //player is hit
+        sendAll({header: "playerHit", data: {playerId: player.id, damage: projectileList[i].constants.damage}}); //!!here!!, change this for splash area damage
+
+        projectileList.splice(i, 1); //delete projectile after hit
+      }
+    })
+  }
+
+  //send data to clients
+  sendAll({header: "updateOfProjectiles", data: {projectileList: projectileList}})
+}
+
+
+
+function isPointInCube(point, cube) {
+  let bounds = getBoxBounds(cube.position, cube.size);
+
+  let isInCube = point[0] > bounds[0] && point[0] < bounds[1] && point[1] > bounds[2] && point[1] < bounds[3] && point[2] > bounds[4] && point[2] < bounds[5];
+
+  return isInCube; //true = point is in cube, false = point is not in cube
+}
+
+
+function getBoxBounds(position, dimensions) {
+  let box = [];
+  box[0] = position[0] - dimensions[0] * 0.5;
+  box[1] = position[0] + dimensions[0] * 0.5;
+  box[2] = position[1] - dimensions[1] * 0.5;
+  box[3] = position[1] + dimensions[1] * 0.5;
+  box[4] = position[2] - dimensions[2] * 0.5;
+  box[5] = position[2] + dimensions[2] * 0.5;
+
+  return box;
+}
+
+function shootSlotAmmunition(characterId, playerId) {
+
+  let mainAttackInfo = clientList[clients.get(playerId)].mainAttackInfo;
+
+  if (mainAttackInfo == undefined) {
+    //this player shoots the first time, no data avaiable
+    //first time shooting, therefore, all slots are ready
+    let slotList = [];
+    for(var i = 0; i < mainAttackMaxAmmoCapacity[characterId]; i++) { //creates a list with all slots, 0 = slot not ready, 1 = slot ready, different character have different slots, therefore a for loop is used
+      slotList.push(Date.now() - 100000); //(dummy data) 100 seconds since last shot, so it had definitely enough time to reload 
+    }
+    mainAttackInfo = {slotsInfo: slotList, timeStampOfLastShot: Date.now() - 10000}; //timeStampOfLastShot again some dummy data
+    clientList[clients.get(playerId)].mainAttackInfo = mainAttackInfo;
+  }
+
+  //mainAttackInfo is ready
+
+  for (var i = 0; i < mainAttackInfo.slotsInfo.length; i++) { //checks every slot
+    let slot = mainAttackInfo.slotsInfo[i];
+    if (Date.now() - slot > timeBetweenShots[characterId][1] * 1000) { //if time since last shot in this slot is longer than minimal time, then shoot. *1000, because data is in seconds and not in milliseconds
+      //slot is ready
+      if (Date.now() - mainAttackInfo.timeStampOfLastShot > timeBetweenShots[characterId][0] * 1000) { //checks if last shot of player was longer ago than minimal time
+        //slot is ready and last shot was long ago -> ready to shoot!
+
+        clientList[clients.get(playerId)].mainAttackInfo.slotsInfo[i] = Date.now();
+        clientList[clients.get(playerId)].mainAttackInfo.timeStampOfLastShot = Date.now();
+        console.log(playerId + " is shooting with slot ammunition as character " + characterId);
+        //shoot Physical Projectile
+        addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: [0.01, 0.01, 0], id: Date.now() + Math.random(), constants: {airDragFactor: 0, gravityFactor: 0.00001, damage: 100, damageArea: 3, projectileType: 1, minDistanceToHit: 0.1}});
+
+      }
+
+      break; //only one shot per click, so the other slots dont have to be checked
+    }
+  }
+
+  /*
+  1. check, if a slot is ready
+  2. Shoot at this slot, set new time of last shot, set slot to not ready
+  3. if no slot ready, do nothing
+  */
+  
+}
 
 function recalculateClients() {
   clients.clear();
@@ -158,6 +272,7 @@ function client(id, ws, position, model, rotation, hp) {
   this.model = model
   this.isInGame = false;
   this.characterId = 0;
+  this.mainAttackInfo = undefined;
 }
 
 //check if message from client is JSON data
@@ -271,7 +386,32 @@ wss.on('connection', (ws) => {
       myclient.rotation = message.data.rotation;
       sendAll({header: "rotateevent", data: {playerId: id, rotation: message.data.rotation}});
 
-    } else if (message.header == "attacking") {
+    } else if (message.header == "mainAttack") {
+      let attackType = characterMainWeaponType[message.data.characterId];
+
+      if (attackType == 0 || attackType == 2) { //0 = area attack, 2 = machine gun attack with hitscan; ammunition bar (like machine gun), shoots every x seconds an attack of type y (0: kettle (cone hitscan, limited range), 2: coffee can (straight hitscan, but only limited range))
+        //on off mode
+        //triggered once, loops and checks everytime if key is still pressed -> machine gun, steam from kettle
+        //if newly on, check time between now and last shot
+            //if enough time passed, shoot
+            //wait until next bullet, check if still on
+                //if on: shoot and same again
+                //if not, break loop and dont shoot
+        
+      } else if (attackType == 1) { //projectiles slot ammunition (toaster, mixer, knifeblock) (one time shoot)
+
+        //try to shoot with slot ammunition
+        shootSlotAmmunition(message.data.characterId, id); 
+
+        //press and shoot once mode
+        //search for loaded ammunition slot
+          //if found -> shoot and set timer for this slot
+          //if no loaded ammunition slot left -> do nothing
+
+      } else {
+        console.log("attack type not found");
+      }
+
       //spieler schiesst irgendwo hin
       let startVec = new THREE.Vector3(message.data.position[0], message.data.position[1], message.data.position[2]);
       let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
@@ -304,7 +444,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-//erstellt eine zufällige Id für einen neuen Client (es wäre theoretisch möglich 2 gleiche uuidv4s zu erstellen...)
+//erstellt eine zufällige Id für einen neuen Client (es wäre theoretisch möglich 2 gleiche uuidv4s zu erstellen...), Funktion nicht von mir, quelle
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
