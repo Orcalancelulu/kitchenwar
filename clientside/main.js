@@ -44,6 +44,8 @@ let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, i
 let movementData = movementDataPresets[0];
 
 let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster2.glb", "models/wasserkocher/wasserkocher.glb", "models/wasserkocher/wasserkocher.glb"];
+let projectileModelPaths = ["", "models/toaster/toast.glb", ""]
+
 let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5]]
 let playerSize = [0.4, 1, 0.4];
 
@@ -62,6 +64,8 @@ let projectileList = [];
 
 
 let particleGeo = new THREE.BufferGeometry(); //debugging
+
+let timeStampForMainAttackCharge;
 
 
 
@@ -219,16 +223,24 @@ function takeCoordsAndPrintOut() {
   getColliderCoordsDebuggingY = [];
 }
 
-document.body.addEventListener("click", (event)=> {
+document.body.addEventListener("mousedown", (event) => { 
   if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
 
-  //Player wants to use main attack
-  
-  //attack modes: 
-    // - ammunition bar wich refills at a certain speed (area damage, like flamethrower) //server side difficult
-    // - slot ammunition (projectile) (toaster, blender) //server side difficult
-    // - normal machine gun (hit scan) with reload once its emtpy //server side easy to do
+  if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
+    //kettle and coffee can
 
+    //send on
+
+  } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2) {
+    //toaster and mixer
+
+    //charge factor -> set timestamp
+    timeStampForMainAttackCharge = Date.now();
+  } 
+});
+
+document.body.addEventListener("mouseup", (event) => { 
+  if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
 
   
   let lookVector = new THREE.Vector3;
@@ -238,16 +250,51 @@ document.body.addEventListener("click", (event)=> {
   let bodyVector = new THREE.Vector3;
   playerList[0].model.getWorldDirection(bodyVector);
   bodyVector = bodyVector.normalize();
-  //let angleCamera = new THREE.Euler(0, 0, 0, "YXZ");
 
-  //let eulerList = [angleCamera.setFromQuaternion(camera.quaternion).x*57.2957, angleCamera.setFromQuaternion(camera.quaternion).y*57.2957, angleCamera.setFromQuaternion(camera.quaternion).z*57.2957];
-  //console.log(eulerList);
-  //lookVector = new THREE.Vector3(camera.position.x - playerList[0].model.position.x, camera.position.y - playerList[0].model.position.y, camera.position.z - playerList[0].model.position.z).normalize();
-  //console.log(lookVector);
-  //rayChecker(camera.position, lookVector, 0.01, 50); //debugging
+
+  if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
+    //kettle and coffee can
+
+    //send off
+
+  } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2) {
+    //toaster and mixer
+
+    //charge factor -> calculate difference, send attack
+    let velocityFactor = (Date.now() - timeStampForMainAttackCharge)*0.001;
+    if (velocityFactor > 1) velocityFactor = 1;
+    ws.send(JSON.stringify({header: "mainAttack", data: {rotationBody: [bodyVector.x, bodyVector.y, bodyVector.z], rotationCamera: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId, velocityFactor: velocityFactor}}));
+
+  } 
+});
+
+
+
+
+
+document.body.addEventListener("click", (event) => {
+  if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
+
+  //Player wants to use main attack
+  
+  //attack modes: 
+    // - ammunition bar wich refills at a certain speed (area damage, like flamethrower) //server side difficult
+    // - slot ammunition (projectile) (toaster, blender) //server side difficult
+    // - normal machine gun (hit scan) with reload once its emtpy //server side easy to do
+
+/*
+  
+  let lookVector = new THREE.Vector3;
+  camera.getWorldDirection(lookVector);
+  lookVector = lookVector.normalize(); 
+
+  let bodyVector = new THREE.Vector3;
+  playerList[0].model.getWorldDirection(bodyVector);
+  bodyVector = bodyVector.normalize();
+ 
   console.log(bodyVector);
   ws.send(JSON.stringify({header: "mainAttack", data: {rotationBody: [bodyVector.x, bodyVector.y, bodyVector.z], rotationCamera: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId, velocityFactor: 1}}));
-  
+  */
 })
 
 let amlight = new THREE.AmbientLight(0xFFFFFF, 0.8);
@@ -1210,21 +1257,33 @@ spotLight.penumbra = 0.7;
 //ende debugging
 
 
-function createNewProjectile(position, projectileType, id) {
+function createNewProjectile(position, projectileType, id, index) {
   //console.log(id);
-  return {position: position, type: projectileType, id: id, model: createProjectileModel(projectileType)};
+  return {position: position, type: projectileType, id: id, model: createProjectileModel(projectileType, index)};
 }
 
-function createProjectileModel(projectileType) {
-  if (projectileType == 0) {
+function createProjectileModel(projectileType, index) {
 
-  } else if (projectileType == 1) {
-    const geometry = new THREE.SphereGeometry( 0.2, 8, 4);
-    const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
-    const sphere = new THREE.Mesh( geometry, material );
-    scene.add( sphere );
-    return sphere;
-  }
+  let modelPath = projectileModelPaths[projectileType];
+  if (modelPath == "") modelPath = "model/dummy_projectile.glb";
+
+  console.log(modelPath);
+  const loader = new GLTFLoader();
+  loader.load(modelPath, function ( gltf ) {
+    console.log(gltf.scene);
+    //gltf.scene.scale.set(1, 1, 1);
+    scene.add(gltf.scene);
+    //console.log(gltf.scene);
+    scene.remove(projectileList[index].model)
+    projectileList[index].model = gltf.scene;
+  });
+  
+  //this will be executed first, because the loader is asynchronous, this is only a placeholder
+  const geometry = new THREE.SphereGeometry( 0.2, 8, 4);
+  const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
+  const sphere = new THREE.Mesh( geometry, material );
+  scene.add( sphere );
+  return sphere;
 }
 
 function updateProjectiles(serverProjectileList) {
@@ -1235,7 +1294,7 @@ function updateProjectiles(serverProjectileList) {
   let projectileIdsList = getIdsFromObjectList(projectileList, "id");
 
 
-  //list for all projectiles that should be deleted
+  //list for all projectiles that should be deleted at the end
   let projectileIdsListCopy = projectileIdsList;
 
 
@@ -1248,6 +1307,7 @@ function updateProjectiles(serverProjectileList) {
 
       //change values in actual list
       projectileList[indexOfFoundId].position = serverProjectileList[i].position;
+      //console.log(projectileList[indexOfFoundId].model);
       moveObject(projectileList[indexOfFoundId].model, projectileList[indexOfFoundId].position);
       
       //delete item from copylist
@@ -1257,7 +1317,7 @@ function updateProjectiles(serverProjectileList) {
       //projectile is not yet in list
 
       //create and add item in list
-      projectileList.push(createNewProjectile(serverProjectileList[i].position, serverProjectileList[i].constants.projectileType, id))
+      projectileList.push(createNewProjectile(serverProjectileList[i].position, serverProjectileList[i].constants.projectileType, id, projectileList.length))
       console.log("created: " + id);
     }
   }
@@ -1275,7 +1335,7 @@ function updateProjectiles(serverProjectileList) {
 }
 
 
-//raycasts for easy creation of colliders
+//raycasts for easy creation of colliders, is not used in the game #debugging
 function rayChecker(startVec, dirVec, near, far) {
 
   let raycaster = new THREE.Raycaster();

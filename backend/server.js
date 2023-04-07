@@ -428,7 +428,7 @@ wss.on('connection', (ws) => {
           let factor = constFactor * message.data.velocityFactor;
           let ownSpeedFactor = 0.1;
 
-          maxVelocityVector = [-message.data.rotationBody[0] * factor, 1 * constFactor, -message.data.rotationBody[2] * factor]; //factor does not affect y axis, therefore, the projectile will follow a steep path with low factor -> no melee attack possible 
+          maxVelocityVector = [-message.data.rotationBody[0] * factor, 1 * constFactor * (message.data.velocityFactor * 0.3 + 0.7), -message.data.rotationBody[2] * factor]; //factor does not affect y axis, therefore, the projectile will follow a steep path with low factor -> no melee attack possible 
           maxVelocityVector = [maxVelocityVector[0] + myclient.velocity[0] * ownSpeedFactor, maxVelocityVector[1] +  myclient.velocity[1] * ownSpeedFactor, maxVelocityVector[2] +  myclient.velocity[2] * ownSpeedFactor];
         } 
         shootSlotAmmunition(message.data.characterId, id, maxVelocityVector);
@@ -436,11 +436,6 @@ wss.on('connection', (ws) => {
       } else {
         console.log("attack type not found");
       }
-      /*
-      //spieler schiesst irgendwo hin
-      let startVec = new THREE.Vector3(message.data.position[0], message.data.position[1], message.data.position[2]);
-      let dirVec = new THREE.Vector3(message.data.rotation[0], message.data.rotation[1], message.data.rotation[2]);
-      rayChecker(startVec, dirVec, 0.01, 30);*/
 
     } else if (message.header == "joiningGame") {
       //spieler war vorher noch im menü, jetzt aber im game mit charakter
