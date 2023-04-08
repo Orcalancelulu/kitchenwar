@@ -183,8 +183,7 @@ function particleTesting() {
 }
 
 function getCoordsOfRaycast(axis) {
-  let lookVector = new THREE.Vector3;
-  camera.getWorldDirection(lookVector);
+  let lookVector = getLookDirectionOfObject(camera);
   
   if (axis == "x") return rayChecker(camera.position, lookVector, 0.01, 50).x;
   if (axis == "y") return rayChecker(camera.position, lookVector, 0.01, 50).y;
@@ -193,9 +192,7 @@ function getCoordsOfRaycast(axis) {
 }
 
 function takeCoordsAndPrintOut() {
-  let lookVector = new THREE.Vector3;
-  camera.getWorldDirection(lookVector);
-
+  //let lookVector = getLookDirectionOfObject(camera);
   let point = playerList[0].model.position;
 
 
@@ -229,7 +226,11 @@ document.body.addEventListener("mousedown", (event) => {
   if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
     //kettle and coffee can
 
+    let lookVector = getLookDirectionOfObject(camera).normalize();
+
     //send on
+    ws.send(JSON.stringify({header: "mainAttack", data: {action: 1, rotationCamera: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId}}));
+
 
   } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2) {
     //toaster and mixer
@@ -243,19 +244,16 @@ document.body.addEventListener("mouseup", (event) => {
   if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
 
   
-  let lookVector = new THREE.Vector3;
-  camera.getWorldDirection(lookVector);
-  lookVector = lookVector.normalize(); 
-
-  let bodyVector = new THREE.Vector3;
-  playerList[0].model.getWorldDirection(bodyVector);
-  bodyVector = bodyVector.normalize();
+  let lookVector = getLookDirectionOfObject(camera).normalize(); 
+  let bodyVector = getLookDirectionOfObject(playerList[0].model).normalize();
 
 
   if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
     //kettle and coffee can
 
     //send off
+    ws.send(JSON.stringify({header: "mainAttack", data: {action: 0, characterId: playerList[0].characterId}})); //action: 1 = start shooting, action: 0 = stop shooting
+
 
   } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2) {
     //toaster and mixer
@@ -271,7 +269,7 @@ document.body.addEventListener("mouseup", (event) => {
 
 
 
-
+/*
 document.body.addEventListener("click", (event) => {
   if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
 
@@ -282,7 +280,7 @@ document.body.addEventListener("click", (event) => {
     // - slot ammunition (projectile) (toaster, blender) //server side difficult
     // - normal machine gun (hit scan) with reload once its emtpy //server side easy to do
 
-/*
+
   
   let lookVector = new THREE.Vector3;
   camera.getWorldDirection(lookVector);
@@ -294,8 +292,9 @@ document.body.addEventListener("click", (event) => {
  
   console.log(bodyVector);
   ws.send(JSON.stringify({header: "mainAttack", data: {rotationBody: [bodyVector.x, bodyVector.y, bodyVector.z], rotationCamera: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId, velocityFactor: 1}}));
-  */
+  
 })
+*/
 
 let amlight = new THREE.AmbientLight(0xFFFFFF, 0.8);
 let spotLight = new THREE.SpotLight(0xFFFFFF, 0);
@@ -402,7 +401,7 @@ function applyChangesToAllChildren(objects, layer, alpha, shouldCastShadows) {
 
 const addGltfToScene = () => {
   const loader = new GLTFLoader();
-  loader.load("models/kitchen.glb", function ( gltf ) {
+  loader.load("models/kitchen_optimized.glb", function ( gltf ) { //models/kitchen.glb
     gltf.scene.scale.set(5, 5, 5);
     moveObject(gltf.scene, [30, 4, 40]);
     scene.add(gltf.scene);
@@ -410,6 +409,8 @@ const addGltfToScene = () => {
     gltf.scene.receiveShadow = true;
     gltf.scene.layers.set(1);
     applyChangesToAllChildren(gltf.scene.children, 1, 0.2, true); //layer 1 means map
+
+    renderer.shadowMap.needsUpdate = true;
     //mixer = new THREE.AnimationMixer(gltf.scene);
     //let action = mixer.clipAction(gltf.animations[0]);
 
@@ -439,8 +440,7 @@ const movePlayer = (vector, playerObj) => {
 
   if (movementData.movementType == 0) {
     
-    let lookVector = new THREE.Vector3();
-    playerObj.getWorldDirection(lookVector);
+    let lookVector = getLookDirectionOfObject(playerObj);
 
     playerList[0].velocity.add(new THREE.Vector3(lookVector.x * movementData.moveSpeed * vector[0] +lookVector.z * movementData.moveSpeed * vector[1], 0, lookVector.z * movementData.moveSpeed* vector[0] + -lookVector.x * movementData.moveSpeed* vector[1]));
   
@@ -463,7 +463,7 @@ const movePlayer = (vector, playerObj) => {
 
     if (vector[1] != 0) {
       let quat = playerObj.quaternion;
-      ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
+      ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w], lookVector: getLookDirectionOfObject(camera)}}))
     }
 
 
@@ -659,6 +659,12 @@ function mouseWheelEvent(event) {
   if (wantedDistanceToPlayer > maxDistanceToPlayer) wantedDistanceToPlayer = maxDistanceToPlayer;
 }
 
+function getLookDirectionOfObject(object) {
+  let lookVector = new THREE.Vector3;
+  object.getWorldDirection(lookVector);
+  return lookVector;
+}
+
 const createCameraControl = (rot) => {
   let quaternion = new THREE.Quaternion(rot[0], rot[1], rot[2], rot[3]);
 
@@ -668,7 +674,7 @@ const createCameraControl = (rot) => {
   controls = new PointerLockControls( camera, document.body, () => {if(movementData.movementType == 0) return playerList[0].model}, function(quat) {
     //rotation an server schicken
 
-    ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w]}}))
+    ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w], lookVector: getLookDirectionOfObject(camera)}}))
   });
   //moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
 
@@ -798,9 +804,7 @@ const applyPhysics = () => {
     playerList[0].velocity.z += playerList[0].velocity.z * -dampening; //keine ahnung wie viel #debugging  
   } else if (movementData.movementType == 1 && playerList[0].isGrounded) {
     
-    let lookVector = new THREE.Vector3();
-    playerList[0].model.getWorldDirection(lookVector);
-
+    let lookVector = getLookDirectionOfObject(playerList[0].model);
     playerList[0].velocity = new THREE.Vector3(lookVector.x * movementData.currentSpeed, playerList[0].velocity.y, lookVector.z * movementData.currentSpeed);
 
     movementData.currentSpeed = movementData.currentSpeed / dampening;
@@ -995,6 +999,11 @@ const createScene = (el) => {
   renderer = new THREE.WebGLRenderer({canvas: el, antialias: true});
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+
+  addGltfToScene();
+
+
 
 
   generateMap(mapData);
@@ -1236,8 +1245,8 @@ moveObject(dilight, [-20, 40, 44.19]);
 scene.add( helper );*/
 //dilight.lookAt(new THREE.Vector3(0, 0, 0));
 dilight.castShadow = true;
-dilight.shadow.mapSize.width = 2048;
-dilight.shadow.mapSize.height = 2048;
+dilight.shadow.mapSize.width = 1024;
+dilight.shadow.mapSize.height = 1024;
 moveObject(dilightTarget, [[35, 0, 30]])
 dilight.target.position.set(35, 0, 30);
 dilight.target.updateMatrixWorld();
@@ -1267,13 +1276,10 @@ function createProjectileModel(projectileType, index) {
   let modelPath = projectileModelPaths[projectileType];
   if (modelPath == "") modelPath = "model/dummy_projectile.glb";
 
-  console.log(modelPath);
   const loader = new GLTFLoader();
   loader.load(modelPath, function ( gltf ) {
-    console.log(gltf.scene);
     //gltf.scene.scale.set(1, 1, 1);
     scene.add(gltf.scene);
-    //console.log(gltf.scene);
     scene.remove(projectileList[index].model)
     projectileList[index].model = gltf.scene;
   });
@@ -1360,7 +1366,7 @@ function rayChecker(startVec, dirVec, near, far) {
   }
 }
 
-addGltfToScene();
+
 
 particleTesting();
 
