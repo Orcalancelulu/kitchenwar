@@ -50,6 +50,8 @@ let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5]]
 let playerSize = [0.4, 1, 0.4];
 
 let mixer;
+let needsKettleParticles = false;
+const maxParticleCount = 100;
 
 let controls;
 let isInGame = false;
@@ -97,6 +99,7 @@ function particleTesting() {
   let uniforms = {
 
     pointTexture: { value: new THREE.TextureLoader().load( 'texture/wasserdampf.png' ) }
+    
 
   };
 
@@ -105,28 +108,31 @@ function particleTesting() {
     uniforms: uniforms, //attribute float size; varying vec3 vColor;
     vertexShader: `
     
-    attribute float size; 
     varying vec3 vColor;
+    attribute float isVisible;
+    attribute float lifeCycleFactor;
+
+    varying float lifeCycleFactorForFragment;
 
     void main() {
-
       
+      lifeCycleFactorForFragment = lifeCycleFactor;
 
       vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
 
-      gl_PointSize = 0.7 * ( 300.0 / -mvPosition.z );
+      gl_PointSize = 1.2 * ( 300.0 / -mvPosition.z ) * isVisible  * (0.8 * lifeCycleFactor + 0.2);
 
       gl_Position = projectionMatrix * mvPosition;
 
     }`, //varying vec3 vColor;
     fragmentShader: `	
     uniform sampler2D pointTexture;
-
     varying vec3 vColor;
+    varying float lifeCycleFactorForFragment;
 
     void main() {
 
-      gl_FragColor = vec4( vec3(1.0, 1.0, 1.0), 1.0 );
+      gl_FragColor = vec4( vec3(1.0, 1.0, 1.0), 1.0 - lifeCycleFactorForFragment);
 
       gl_FragColor = gl_FragColor * texture2D( pointTexture, gl_PointCoord );
 
@@ -141,45 +147,50 @@ function particleTesting() {
   } );
 
 
-  const particleCount = 100;
+  const particleCount = 32;
 
   
 
   const positions = [];
-	const colors = [];
-	const sizes = [];
+  const velocities = [];
+  const startTimeStamp = [];
+  const isVisible = [];
+  const lifeCycleFactor = [];
 
-  const angles = [];
-  const timeDisplacement = []; //so each particle starts at another point in the animation
 
-  let radius = 0.1;
+
+  let lookVector = getLookDirectionOfObject(camera).normalize().multiplyScalar(3);
+  console.log(lookVector);
 
   for (var i = 0; i<particleCount; i++) {
-    let angle = Math.random()*2*3.1415
-    let cos = Math.cos(angle);
-    let sin = Math.sin(angle);
-
-    angles.push(0);
-    angles.push(cos * radius * Math.random());
-    angles.push(sin * radius * Math.random());
-
-    timeDisplacement.push(Math.random()*5000); //0 - 5 seconds displacement, most animations only last a second or two
+ 
+    velocities.push(0); //velocities are getting calculated in the particle animation, not here, therefore just placeholder 0
+    velocities.push(0);
+    velocities.push(0);
 
     positions.push(0); //points are getting calculated in the particle animation, not here, therefore just placeholder 0
 		positions.push(0);
 		positions.push(0);
+
+    startTimeStamp.push(0); //placeholder
+    isVisible.push(0); //0 = not visible
+    lifeCycleFactor.push(0);
   } 
 
-  particleGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
-  particleGeo.setAttribute( 'angles', new THREE.Float32BufferAttribute( angles, 3 ) );
-  particleGeo.setAttribute( 'timeDisplacement', new THREE.Float32BufferAttribute( timeDisplacement, 1 ) );
+  particleGeo.setAttribute( 'position', new THREE.Float32BufferAttribute(positions, 3)); //3 means 3 per particle
+  particleGeo.setAttribute( 'velocities', new THREE.Float32BufferAttribute(velocities, 3));
+  particleGeo.setAttribute( 'startTimeStamp', new THREE.Float32BufferAttribute(startTimeStamp, 1));
+  particleGeo.setAttribute( 'isVisible', new THREE.Float32BufferAttribute(isVisible, 1));
+  particleGeo.setAttribute( 'lifeCycleFactor', new THREE.Float32BufferAttribute(lifeCycleFactor, 1));
 
 
   let particleSystem = new THREE.Points( particleGeo, shaderMaterial);
-  //particleSystem.receiveShadow = true;
+  particleSystem.frustumCulled = false; //so its visible, even if the main coordinate is not
+ 
 
-  scene.add( particleSystem );
-  moveObject(particleSystem, [19.3, 2, 20.05]);
+  scene.add(particleSystem);
+  moveObject(particleSystem, [0, 0, 0]);
+  //return particleSystem;
 }
 
 function getCoordsOfRaycast(axis) {
@@ -226,6 +237,8 @@ document.body.addEventListener("mousedown", (event) => {
   if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
     //kettle and coffee can
 
+    needsKettleParticles = true;
+
     let lookVector = getLookDirectionOfObject(camera).normalize();
 
     //send on
@@ -250,6 +263,8 @@ document.body.addEventListener("mouseup", (event) => {
 
   if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
     //kettle and coffee can
+
+    needsKettleParticles = false;
 
     //send off
     ws.send(JSON.stringify({header: "mainAttack", data: {action: 0, characterId: playerList[0].characterId}})); //action: 1 = start shooting, action: 0 = stop shooting
@@ -463,7 +478,7 @@ const movePlayer = (vector, playerObj) => {
 
     if (vector[1] != 0) {
       let quat = playerObj.quaternion;
-      ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w], lookVector: getLookDirectionOfObject(camera)}}))
+      ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w], lookVector: getLookDirectionOfObject(camera), cameraPos: [camera.position.x, camera.position.y, camera.position.z]}}))
     }
 
 
@@ -674,7 +689,7 @@ const createCameraControl = (rot) => {
   controls = new PointerLockControls( camera, document.body, () => {if(movementData.movementType == 0) return playerList[0].model}, function(quat) {
     //rotation an server schicken
 
-    ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w], lookVector: getLookDirectionOfObject(camera)}}))
+    ws.send(JSON.stringify({header: "rotateevent", data: {rotation: [quat.x, quat.y, quat.z, quat.w], lookVector: getLookDirectionOfObject(camera), cameraPos: [camera.position.x, camera.position.y, camera.position.z]}}))
   });
   //moveObject(camera, [playerList[0].model.position.x, 3, playerList[0].model.position.z])
 
@@ -941,27 +956,87 @@ function moveSmoothCamera() {
 }
 
 function updateTestParticles() {
-  let positions = particleGeo.attributes.position.array;
-  let angles = particleGeo.attributes.angles.array;
-  let timeDisplacement = particleGeo.attributes.timeDisplacement.array;
 
-  const coneLength = 2;
+  //moveObject(particleSystem, playerList[0].position);
+
+  let positions = particleGeo.attributes.position.array;
+  let velocities = particleGeo.attributes.velocities.array;
+  let startTimeStamp = particleGeo.attributes.startTimeStamp.array;
+  let isVisible = particleGeo.attributes.isVisible.array;
+  let lifeCycleFactor = particleGeo.attributes.lifeCycleFactor.array;
+
+  //console.log(startTimeStamp);
+
   const particleSpeed = 0.002;
-  const secondCircleSize = 10; //1 means twice as big, 0.5 = same size
-  let currentTime = Date.now();
+  const coneLength = 2;
+  const currentTime = Date.now() - 1682400000000; //minus diese Zahl, damit currentTime weniger bits braucht und in einem 32 bit Float platz hat
   
   //console.log(timeFactor);
-  for (var i = 0; i< positions.length/3; i++) {
-    let timeFactor = (particleSpeed * (currentTime + timeDisplacement[Math.floor(i/3)]))%1; //gives a number between 0 and 1, triangle graph
+  
+  let particlesToCreate = 0;
+  let localLookVector;
+  
+
+  if (needsKettleParticles) { //button is being held down, player is attacking -> particles are needed
+    particlesToCreate = 1;
+
+    let lookVector = getLookDirectionOfObject(playerList[0].model); //noch ändern, falsche richtung
     
-    positions[3*i + 0] = timeFactor * coneLength;
-    
-    positions[3*i + 1] = angles[3*i + 1] *  timeFactor * secondCircleSize + angles[3*i + 1];
-    positions[3*i + 2] = angles[3*i + 2] *  timeFactor * secondCircleSize + angles[3*i + 2];
-    //positions[3*i + 2] += sideSpeed * ;
+    localLookVector = new THREE.Vector3().copy(lookVector);
+    let randomDirection = new THREE.Vector3().randomDirection().multiplyScalar(0.4);
+    localLookVector.add(randomDirection).normalize();  
+
   }
 
+  //for each particle in this particle system
+  for (var i = 0; i< positions.length/3; i++) {
+    let timeFactor = (particleSpeed * (currentTime - startTimeStamp[i])); //gives a number between 0 and 1, triangle graph
+
+    if (isVisible[i] == 1) {
+      //check if it should be deleted
+      //console.log(timeFactor)
+      if (timeFactor > 1) {
+        isVisible[i] = 0; 
+
+        positions[3*i + 0] = 0;
+        positions[3*i + 1] = 0;
+        positions[3*i + 2] = 0;
+
+        continue;
+      } 
+
+      lifeCycleFactor[i] = timeFactor;
+
+      positions[3*i + 0] = velocities[3*i + 0] * timeFactor * coneLength + playerList[0].position[0];
+      positions[3*i + 1] = velocities[3*i + 1] * timeFactor * coneLength + playerList[0].position[1];
+      positions[3*i + 2] = velocities[3*i + 2] * timeFactor * coneLength + playerList[0].position[2];
+
+    } else if(particlesToCreate > 0) {
+      isVisible[i] = 1;
+      lifeCycleFactor[i] = 2;
+
+      positions[3*i + 0] = 0;
+      positions[3*i + 1] = 0; //hier falls nötig offset anpassen
+      positions[3*i + 2] = 0;
+
+      velocities[3*i + 0] = -localLookVector.x;
+      velocities[3*i + 1] = -localLookVector.y;
+      velocities[3*i + 2] = -localLookVector.z;
+
+
+      startTimeStamp[i] = currentTime;
+
+
+
+      particlesToCreate -= 1;
+    }
+  }
+
+
+  //particleGeo.attributes.startTimeStamp.needsUpdate = true;
+  particleGeo.attributes.lifeCycleFactor.needsUpdate = true;
   particleGeo.attributes.position.needsUpdate = true;
+  particleGeo.attributes.isVisible.needsUpdate = true;
 
 }
 
@@ -1245,8 +1320,8 @@ moveObject(dilight, [-20, 40, 44.19]);
 scene.add( helper );*/
 //dilight.lookAt(new THREE.Vector3(0, 0, 0));
 dilight.castShadow = true;
-dilight.shadow.mapSize.width = 1024;
-dilight.shadow.mapSize.height = 1024;
+dilight.shadow.mapSize.width = 2048;
+dilight.shadow.mapSize.height = 2048;
 moveObject(dilightTarget, [[35, 0, 30]])
 dilight.target.position.set(35, 0, 30);
 dilight.target.updateMatrixWorld();

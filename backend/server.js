@@ -20,8 +20,8 @@ let menueSpawnPos = [-40, 5, -40];
 
 let characterMainWeaponType = [0, 1, 1, 1, 2]; //this means, at index 0 (kettle) has type 0, index 1 (toaster) has type 1, index 2 (knifeblock) has type 1, index 3 (mixer) has type 1, index 4 (coffee can) has type 2
 let mainAttackMaxAmmoCapacity = [100, 2, 6, 2, 20] //how much ammunition / slots / power each character has
-let mainAttackDamage = [10, 100, 50, 20, 10];
-let timeBetweenShots = [[2, 0.5], [1, 8], [2, 50], [0.2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
+let mainAttackDamage = [5, 100, 50, 20, 10];
+let timeBetweenShots = [[0.25, 0.5], [1, 8], [2, 50], [0.2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
 
 
 let playerSize = [0.25, 1, 0.25];
@@ -254,33 +254,15 @@ function createScene() {
   })
 }
 
-function rayChecker(startVec, dirVec, near, far) {
+function getLookVector(startVec, dirVec, bodyVec, near, far) {
 
   raycaster.set(startVec, dirVec, near, far);
   const intersects = raycaster.intersectObjects(scene.children);
 
   if (intersects.length > 0) {
-    if (intersects[0].object.name.indexOf("player") >= 0) {
-      let playerId = intersects[0].object.name.substring(10);
-      if (!clientList[clients.get(playerId)].isInGame) return; //falls spieler per zufall per luftlinie auf spielerhaufen in standby schiesst, dann bitte kein schaden
-
-      let damage = 10; //debugging, später noch anders
-      clientList[clients.get(playerId)].hp -= damage;
-      if (clientList[clients.get(playerId)].hp <= 0) {
-        console.log("player: " + playerId + " died");
-        sendAll({header: "putToStandby", data: {cause: "death", playerId: playerId}});
-        clientList[clients.get(playerId)].isInGame = false;
-        clientList[clients.get(playerId)].hp = 100; //debugging, später noch anders
-
-        //aus dem Weg mit dem Spieler, damit er nicht Schüsse blockiert und so
-        clientList[clients.get(playerId)].position = menueSpawnPos;
-        moveObject(clientList[clients.get(playerId)].model, menueSpawnPos);
-        
-      } else {
-        sendAll({header: "playerHit", data: {playerId: playerId, damage: damage}});
-      }
-
-    }
+    return intersects[0].point.sub(bodyVec)
+  } else {
+    return dirVec;
   }
 }
 
@@ -301,6 +283,7 @@ function client(id, ws, position, model, rotation, hp) {
   this.mainAttackInfo = undefined;
   this.velocity = [0, 0, 0];
   this.lookVector = [0, 0, 0];
+  this.cameraPos = [0, 0, 0];
 }
 
 //check if message from client is JSON data
@@ -370,8 +353,10 @@ function isPointInCone(point, coneObject) {
 function attackForward(playerId, characterId) {
 
   let clientListIndex = clients.get(playerId);
-  let lookVector = clientList[clientListIndex].lookVector;
-
+  let lookVector = clientList[clientListIndex].lookVector; //camera looks like this, but not playermodel, therefore raycast from camera and make vector between point hit and model Position
+  lookVector = new THREE.Vector3(...lookVector); //convert lookVector from array to threeJs vector
+  lookVector = getLookVector(new THREE.Vector3(...clientList[clientListIndex].cameraPos), lookVector, new THREE.Vector3(...clientList[clientListIndex].position), 0.1, 200);
+  console.log(lookVector.length());
   clientList[clientListIndex].mainAttackInfo.timeStampOfLastShot = Date.now();
 
   if (clientList[clientListIndex].mainAttackInfo.ammunition == undefined) { //first time shooting
@@ -385,9 +370,9 @@ function attackForward(playerId, characterId) {
       console.log("attacking with kettle");
       //check if a player is inside the cone
       for(var i = 0; i<clientList.length; i++) {
-        if (i == clientListIndex) continue; //player who shoots should not be hit (its his own ability)
+        if (i == clientListIndex || clientList[i].isInGame == false) continue; //player who shoots should not be hit and only player who are in game should get hit (its his own ability)
+        
 
-        lookVector = new THREE.Vector3(lookVector[0], lookVector[1], lookVector[2]); //convert lookVector from array to threeJs vector
         //console.log(lookVector);
         if(isPointInCone(clientList[i].position, {startPosition: clientList[clientListIndex].position, maxAngle: 0.3, coneLength: 2, coneLookvector: lookVector})) {
           //player is in cone -> damage player
@@ -489,6 +474,7 @@ wss.on('connection', (ws) => {
       //console.log(message.data.lookVector);
 
       myclient.rotation = message.data.rotation;
+      myclient.cameraPos = message.data.cameraPos;
       myclient.lookVector = [message.data.lookVector.x, message.data.lookVector.y, message.data.lookVector.z];
 
       //console.log(clientList[clients.get(id)].lookVector);
