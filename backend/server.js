@@ -13,15 +13,15 @@ let physicsLoopWaitTime = 16; //16 => 1000/16 = 60 times per second
 
 const clients = new Map();
 
-const raycaster = new THREE.Raycaster();
+let raycaster;
 
 //zum testen mal hardcoded. später soll es noch aus einem file kommen
 let menueSpawnPos = [-40, 5, -40];
 
-let characterMainWeaponType = [0, 1, 1, 1, 2]; //this means, at index 0 (kettle) has type 0, index 1 (toaster) has type 1, index 2 (knifeblock) has type 1, index 3 (mixer) has type 1, index 4 (coffee can) has type 2
-let mainAttackMaxAmmoCapacity = [100, 2, 6, 2, 20] //how much ammunition / slots / power each character has
+let characterMainWeaponType = [0, 1, 1, 1, 2]; //this means, at index 0 (kettle) has type 0, index 1 (toaster) has type 1, index 2 (mixer) has type 1, index 3 (knifeblock) has type 1, index 4 (coffee can) has type 2
+let mainAttackMaxAmmoCapacity = [100, 2, 2, 6, 20] //how much ammunition / slots / power each character has
 let mainAttackDamage = [5, 100, 50, 20, 10];
-let timeBetweenShots = [[0.25, 0.5], [1, 8], [2, 50], [0.2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
+let timeBetweenShots = [[0.25, 0.5], [1, 8], [2, 10], [0.2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
 
 
 let playerSize = [0.25, 1, 0.25];
@@ -75,7 +75,7 @@ function addNewProjectile(projectile) { //OnOrOff: false = turn off, true = turn
     //starts the loop
     isPhysicsLoopActive = true;
     
-    PhysicsLoop = setInterval(calcPhysics, physicsLoopWaitTime) //2 times per second
+    PhysicsLoop = setInterval(calcPhysics, physicsLoopWaitTime) 
   }
 }
 
@@ -97,14 +97,13 @@ function calcPhysics() {
     projectileList[i].velocity = [velocity[0], velocity[1] - projectileList[i].constants.gravityFactor * physicsLoopWaitTime, velocity[2]];
     projectileList[i].position = position;
 
-    //console.log(position);
 
     //check for collisions
     let shouldContinue = false;
     Object.keys(mapObject.objects).forEach((key) => {
       let object = mapObject.objects[key];
 
-      if(isPointInCube(position, object) || position[1] < -5) { //if projectile hits a part of the map, it gets destroyed or blows up
+      if(isPointInCube(position, object) || position[1] < -5 || position[1] > 100) { //if projectile hits a part of the map, it gets destroyed or blows up
 
         projectileList.splice(i, 1);
         //console.log("deleted projectile");
@@ -123,11 +122,11 @@ function calcPhysics() {
         //console.log(distance)
         if (distance < projectileList[i].constants.minDistanceToHit && projectileList[i].constants.playerId != player.id) { //if the distance to the player is to small (so projectile touches player), !!here!!, muss besser gemacht werden,  jetzt wird Entfernung nur von Mittelpunkt gemessen, nicht von den Ecken des Spielers
           //player is hit
-          //console.log("player Hit")
+
           clientList[clients.get(player.id)].hp -= projectileList[i].constants.damage;
           sendAll({header: "playerHit", data: {playerId: player.id, damage: projectileList[i].constants.damage}}); //!!here!!, change this for splash area damage
           
-          if (clientList[clients.get(player.id)].hp <= 0) { //if the player is now dead, the playder should die
+          if (clientList[clients.get(player.id)].hp <= 0) { //if the player is now dead, the player should die
             killPlayer(player.id);
           }
           projectileList.splice(i, 1); //delete projectile after hit
@@ -202,8 +201,15 @@ function shootSlotAmmunition(characterId, playerId, velocityVector) {
         //console.log(playerId + " is shooting with slot ammunition as character " + characterId);
         //shoot Physical Projectile
         //console.log(velocityVector);
-        addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: velocityVector, id: Date.now() + Math.random(), constants: {playerId: playerId, airDragFactor: 0, gravityFactor: 0.00001, damage: mainAttackDamage[characterId], damageArea: 3, projectileType: 1, minDistanceToHit: 1}});
 
+        //toaster
+        if (characterId == 1) addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: velocityVector, id: Date.now() + Math.random(), constants: {playerId: playerId, airDragFactor: 0, gravityFactor: 0.00001, damage: mainAttackDamage[characterId], damageArea: 3, projectileType: 1, minDistanceToHit: 1}});
+        
+        //mixer
+        if (characterId == 2) addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: velocityVector, id: Date.now() + Math.random(), constants: {playerId: playerId, airDragFactor: 0, gravityFactor: 0, damage: mainAttackDamage[characterId], damageArea: 3, projectileType: 2, minDistanceToHit: 0.1}});
+
+        //knifeblock
+        //if (characterId == 3)
       }
 
       break; //only one shot per click, so the other slots dont have to be checked
@@ -241,6 +247,8 @@ function createBasicObject(obj, shouldReturn) {
   let model = new THREE.Mesh(geo, mat);
   scene.add(model);
 
+  if (obj.id == undefined) obj.id = Math.floor(Math.random()*100000);
+
   model.name = "id: " + obj.id;
   moveObject(model, obj.position);
 
@@ -256,6 +264,7 @@ function createScene() {
 
 function getLookVector(startVec, dirVec, bodyVec, near, far) {
 
+  raycaster = new THREE.Raycaster();
   raycaster.set(startVec, dirVec, near, far);
   const intersects = raycaster.intersectObjects(scene.children);
 
@@ -356,7 +365,7 @@ function attackForward(playerId, characterId) {
   let lookVector = clientList[clientListIndex].lookVector; //camera looks like this, but not playermodel, therefore raycast from camera and make vector between point hit and model Position
   lookVector = new THREE.Vector3(...lookVector); //convert lookVector from array to threeJs vector
   lookVector = getLookVector(new THREE.Vector3(...clientList[clientListIndex].cameraPos), lookVector, new THREE.Vector3(...clientList[clientListIndex].position), 0.1, 200);
-  console.log(lookVector.length());
+  //console.log(lookVector.length());
   clientList[clientListIndex].mainAttackInfo.timeStampOfLastShot = Date.now();
 
   if (clientList[clientListIndex].mainAttackInfo.ammunition == undefined) { //first time shooting
@@ -371,7 +380,6 @@ function attackForward(playerId, characterId) {
       //check if a player is inside the cone
       for(var i = 0; i<clientList.length; i++) {
         if (i == clientListIndex || clientList[i].isInGame == false) continue; //player who shoots should not be hit and only player who are in game should get hit (its his own ability)
-        
 
         //console.log(lookVector);
         if(isPointInCone(clientList[i].position, {startPosition: clientList[clientListIndex].position, maxAngle: 0.3, coneLength: 2, coneLookvector: lookVector})) {
@@ -386,9 +394,31 @@ function attackForward(playerId, characterId) {
           }
         }
       }
-    } else if (characterId == 3) { //coffee can
+    } else if (characterId == 4) { //coffee can
       //check if someone is hit by the raycast
+      console.log("attacking with coffee can!")
+      raycaster = new THREE.Raycaster();
+      raycaster.set(new THREE.Vector3(...clientList[clientListIndex].position), lookVector.normalize(), 0.1, 200);
+      const intersects = raycaster.intersectObjects(scene.children);
+      
+      if (intersects.length > 0) {
+        if (intersects[0].object.name.indexOf("player") > -1) {
+          //player got hit
+          console.log(intersects[0].object.name.slice(10));
+          const id = intersects[0].object.name.slice(10);
+          
+          //damage player
+          clientList[clients.get(id)].hp -= mainAttackDamage[characterId]; 
+          sendAll({header: "playerHit", data: {playerId: id, damage: mainAttackDamage[characterId]}});
 
+          if (clientList[clients.get(id)].hp < 0) {
+            //player died
+            killPlayer(id);
+          }
+        }
+      }
+
+      //console.log(intersects[0]);
     }
   }
 }
@@ -540,13 +570,25 @@ wss.on('connection', (ws) => {
         let maxVelocityVector = [0, 0.01, 0];
 
         if (message.data.characterId == 1) {
-          let constFactor = 0.01;
+          const constFactor = 0.01;
           let factor = constFactor * message.data.velocityFactor;
           let ownSpeedFactor = 0.1;
 
           maxVelocityVector = [-message.data.rotationBody[0] * factor, 1 * constFactor * (message.data.velocityFactor * 0.3 + 0.7), -message.data.rotationBody[2] * factor]; //factor does not affect y axis, therefore, the projectile will follow a steep path with low factor -> no melee attack possible 
           maxVelocityVector = [maxVelocityVector[0] + myclient.velocity[0] * ownSpeedFactor, maxVelocityVector[1] +  myclient.velocity[1] * ownSpeedFactor, maxVelocityVector[2] +  myclient.velocity[2] * ownSpeedFactor];
-        } 
+        } else if (message.data.characterId == 2) {
+          //mixer
+          const constFactor = 0.01
+
+          let lookVector = getLookVector(new THREE.Vector3(...clientList[clientListIndex].cameraPos), new THREE.Vector3(...clientList[clientListIndex].lookVector), new THREE.Vector3(...clientList[clientListIndex].position), 0.1, 200);
+          lookVector = lookVector.normalize();
+          //console.log(lookVector);
+          maxVelocityVector = [lookVector.x * constFactor, lookVector.y * constFactor, lookVector.z * constFactor];
+
+        } else if (message.data.characterId == 3) {
+          //knife block
+
+        }
         shootSlotAmmunition(message.data.characterId, id, maxVelocityVector);
 
       } else {

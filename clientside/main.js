@@ -39,14 +39,14 @@ let moveVector = [0, 0];
 let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
 
 //movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger) speedmode
-let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
+let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
 
 let movementData = movementDataPresets[0];
 
-let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster2.glb", "models/wasserkocher/wasserkocher.glb", "models/wasserkocher/wasserkocher.glb"];
-let projectileModelPaths = ["", "models/toaster/toast.glb", ""]
+let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster2.glb", "models/mixer/mixer.glb", "models/knife_block/knife_block.glb", "models/coffee_can/coffee_can.glb"];
+let projectileModelPaths = ["", "models/toaster/toast.glb", "", "", ""]
 
-let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5]]
+let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5], [0.4, 0.9, 0.4], [0.4, 1, 0.4], [0.4, 1.1, 0.4]];
 let playerSize = [0.4, 1, 0.4];
 
 let mixer;
@@ -234,7 +234,7 @@ function takeCoordsAndPrintOut() {
 document.body.addEventListener("mousedown", (event) => { 
   if (isInMenu) return; //man soll nicht aus dem Menue-Kameraflugmodus angreifen können
 
-  if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
+  if (playerList[0].characterId == 0 || playerList[0].characterId == 4) {
     //kettle and coffee can
 
     needsKettleParticles = true;
@@ -245,8 +245,8 @@ document.body.addEventListener("mousedown", (event) => {
     ws.send(JSON.stringify({header: "mainAttack", data: {action: 1, rotationCamera: [lookVector.x, lookVector.y, lookVector.z], position: [camera.position.x, camera.position.y, camera.position.z], characterId: playerList[0].characterId}}));
 
 
-  } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2) {
-    //toaster and mixer
+  } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2 ||playerList[0].characterId == 3) {
+    //toaster mixer and knife_block
 
     //charge factor -> set timestamp
     timeStampForMainAttackCharge = Date.now();
@@ -261,7 +261,7 @@ document.body.addEventListener("mouseup", (event) => {
   let bodyVector = getLookDirectionOfObject(playerList[0].model).normalize();
 
 
-  if (playerList[0].characterId == 0 || playerList[0].characterId == 3) {
+  if (playerList[0].characterId == 0 || playerList[0].characterId == 4) {
     //kettle and coffee can
 
     needsKettleParticles = false;
@@ -270,7 +270,7 @@ document.body.addEventListener("mouseup", (event) => {
     ws.send(JSON.stringify({header: "mainAttack", data: {action: 0, characterId: playerList[0].characterId}})); //action: 1 = start shooting, action: 0 = stop shooting
 
 
-  } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2) {
+  } else if (playerList[0].characterId == 1 || playerList[0].characterId == 2 || playerList[0].characterId == 3) {
     //toaster and mixer
 
     //charge factor -> calculate difference, send attack
@@ -362,8 +362,6 @@ export function changeSelectedCharacter(characterId) {
 
   //change look and models
   loadBetterModel(modelPaths[characterId], playerList[0].id, playerList[0].position, false);
-
-  //change attacking presets
 
 
   //send message to server
@@ -1349,7 +1347,7 @@ function createNewProjectile(position, projectileType, id, index) {
 function createProjectileModel(projectileType, index) {
 
   let modelPath = projectileModelPaths[projectileType];
-  if (modelPath == "") modelPath = "model/dummy_projectile.glb";
+  if (modelPath == "" || modelPath == undefined) modelPath = "model/dummy_projectile.glb";
 
   const loader = new GLTFLoader();
   loader.load(modelPath, function ( gltf ) {
