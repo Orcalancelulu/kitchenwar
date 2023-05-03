@@ -19,9 +19,9 @@ let raycaster;
 let menueSpawnPos = [-40, 5, -40];
 
 let characterMainWeaponType = [0, 1, 1, 1, 2]; //this means, at index 0 (kettle) has type 0, index 1 (toaster) has type 1, index 2 (mixer) has type 1, index 3 (knifeblock) has type 1, index 4 (coffee can) has type 2
-let mainAttackMaxAmmoCapacity = [100, 2, 2, 6, 20] //how much ammunition / slots / power each character has
-let mainAttackDamage = [5, 100, 50, 20, 10];
-let timeBetweenShots = [[0.25, 0.5], [1, 8], [2, 10], [0.2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
+let mainAttackMaxAmmoCapacity = [100, 2, 2, 6, 200] //how much ammunition / slots / power each character has
+let mainAttackDamage = [20, 100, 50, 20, 10];
+let timeBetweenShots = [[0.25, 4], [1, 8], [2, 10], [0.2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
 
 
 let playerSize = [0.25, 1, 0.25];
@@ -36,8 +36,8 @@ let mapObject = {
   objects: {
   
     //applyForce List -> jump pads
-    apFo2913: {position: [36, 0.5, 27.65], size: [0.5, 0.5, 0.5], actionOnCollision: "applyForce", forceVector: [0.1, 0.28, 0], isVisible: true, shape: "forcePad"},
-    apFo8276: {position: [17.93, 0.5, 27.65], size: [0.5, 0.5, 0.5], actionOnCollision: "applyForce", forceVector: [-0.1, 0.28, 0], isVisible: true, shape: "forcePad"},
+    apFo2913: {position: [36, 0.33, 27.65], size: [0.5, 0.5, 0.5], actionOnCollision: "applyForce", forceVector: [0.1, 0.28, 0], isVisible: true, shape: "forcePad"},
+    apFo8276: {position: [17.93, 0.33, 27.65], size: [0.5, 0.5, 0.5], actionOnCollision: "applyForce", forceVector: [-0.1, 0.28, 0], isVisible: true, shape: "forcePad"},
 
     //collider list, objects with collision (alles noch hardcoded, wird später noch anders)
     coll5885: {position: [27.51449182990683,2.5356705792056027,22.56412559449208], size: [9.743382639954348, 4.407726812246092, 4.209177619228122]},
@@ -61,7 +61,10 @@ let mapObject = {
     coll3537: {position: [22.052575407408618,8.380673888717753,47.62024521827698], size: [15.393472573393575, 16.097733431270395, 1.2209582328796316]}, //part of inwall west
     coll8858: {position: [37.082866815920354,8.380673888717753,47.62024521827698], size: [2.3746295195364553, 16.097733431270395, 1.2209582328796387]}, //part of inwall east
     coll3133: {position: [19.134719393357486,4.812144428491592,22.501889766090073], size: [8.450764917492176, 0.19999999552965164, 1.500000532832697]}, //brücke 1
-    coll3959: {position: [28.713345229625702,4.8258392057925334,28.343778740468732], size: [1.5000003576278687, 0.17261044092776956, 10.011234067088587]} // brücke 2
+    coll3959: {position: [28.713345229625702,4.8258392057925334,28.343778740468732], size: [1.5000003576278687, 0.17261044092776956, 10.011234067088587]}, // brücke 2
+    coll2960: {position: [27.04178049175198,0,42.02459613073046], size: [31.159893102077376, 0.1, 65.19812251859832]}, //boden (nur serverside gebraucht für raycasts)
+    coll2961: {position: [27.04178049175198,16.429,42.02459613073046], size: [31.159893102077376, 0.1, 65.19812251859832]} //decke (nur serverside gebraucht für raycasts)
+
   } 
 }
 
@@ -103,7 +106,7 @@ function calcPhysics() {
     Object.keys(mapObject.objects).forEach((key) => {
       let object = mapObject.objects[key];
 
-      if(isPointInCube(position, object) || position[1] < -5 || position[1] > 100) { //if projectile hits a part of the map, it gets destroyed or blows up
+      if(isPointInCube(position, object) || position[1] < 0.33 || position[1] > 100) { //if projectile hits a part of the map, it gets destroyed or blows up
 
         projectileList.splice(i, 1);
         //console.log("deleted projectile");
@@ -120,6 +123,7 @@ function calcPhysics() {
         let distance = getDistanceBetweenArrayVector(player.position, position);
         //console.log(projectileList.length);
         //console.log(distance)
+
         if (distance < projectileList[i].constants.minDistanceToHit && projectileList[i].constants.playerId != player.id) { //if the distance to the player is to small (so projectile touches player), !!here!!, muss besser gemacht werden,  jetzt wird Entfernung nur von Mittelpunkt gemessen, nicht von den Ecken des Spielers
           //player is hit
 
@@ -206,10 +210,37 @@ function shootSlotAmmunition(characterId, playerId, velocityVector) {
         if (characterId == 1) addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: velocityVector, id: Date.now() + Math.random(), constants: {playerId: playerId, airDragFactor: 0, gravityFactor: 0.00001, damage: mainAttackDamage[characterId], damageArea: 3, projectileType: 1, minDistanceToHit: 1}});
         
         //mixer
-        if (characterId == 2) addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: velocityVector, id: Date.now() + Math.random(), constants: {playerId: playerId, airDragFactor: 0, gravityFactor: 0, damage: mainAttackDamage[characterId], damageArea: 3, projectileType: 2, minDistanceToHit: 0.1}});
+        if (characterId == 2) addNewProjectile({position: clientList[clients.get(playerId)].position, velocity: velocityVector, id: Date.now() + Math.random(), constants: {playerId: playerId, airDragFactor: 0, gravityFactor: 0, damage: mainAttackDamage[characterId], damageArea: 3, projectileType: 2, minDistanceToHit: 1}});
 
         //knifeblock
-        //if (characterId == 3)
+        if (characterId == 3) {
+          //uses raycasts to attack, not a physical bullet
+          //console.log("attacking with knife")
+
+          raycaster = new THREE.Raycaster;
+          raycaster.set(new THREE.Vector3(...clientList[clients.get(playerId)].position), new THREE.Vector3(...velocityVector), 0.1, 200);
+          const intersects = raycaster.intersectObjects(scene.children);
+
+          if (intersects.length > 0) {
+            //console.log(intersects);
+            sendAll({header: "drawEffect", data: {effectType: 0, duration: 1000,  color: 0xffffff, startPosition: clientList[clients.get(playerId)].position, endPosition: [intersects[0].point.x, intersects[0].point.y, intersects[0].point.z]}})
+
+            if (intersects[0].object.name.indexOf("player") > -1) {
+              //player got hit
+              //console.log(intersects[0].object.name.slice(10));
+              const id = intersects[0].object.name.slice(10);
+              
+              //damage player
+              clientList[clients.get(id)].hp -= mainAttackDamage[characterId]; 
+              sendAll({header: "playerHit", data: {playerId: id, damage: mainAttackDamage[characterId]}});
+
+              if (clientList[clients.get(id)].hp <= 0) {
+                //player died
+                killPlayer(id);
+              }
+            }
+          }
+        }
       }
 
       break; //only one shot per click, so the other slots dont have to be checked
@@ -344,7 +375,7 @@ function isPointInCone(point, coneObject) {
   let coneVector = coneObject.coneLookvector;
 
   //console.log(startToPointVector);
-  //console.log(coneVector);
+  //console.log(startToPointVector.length());
 
   let angleToPoint = startToPointVector.angleTo(coneVector);
 
@@ -368,27 +399,23 @@ function attackForward(playerId, characterId) {
   //console.log(lookVector.length());
   clientList[clientListIndex].mainAttackInfo.timeStampOfLastShot = Date.now();
 
-  if (clientList[clientListIndex].mainAttackInfo.ammunition == undefined) { //first time shooting
-    clientList[clientListIndex].mainAttackInfo.ammunition = mainAttackMaxAmmoCapacity[characterId];
-  }
-
-  if (clientList[clientListIndex].mainAttackInfo.ammunition > 0) { //has it enough ammunition?
+  if (clientList[clientListIndex].mainAttackInfo.ammunition > 0 && clientList[clientListIndex].mainAttackInfo.isReloading == false) { //has it enough ammunition?
     //enough ammunition left
     clientList[clientListIndex].mainAttackInfo.ammunition -= 1;
     if (characterId == 0) { //kettle
-      console.log("attacking with kettle");
+      //console.log("attacking with kettle");
       //check if a player is inside the cone
       for(var i = 0; i<clientList.length; i++) {
         if (i == clientListIndex || clientList[i].isInGame == false) continue; //player who shoots should not be hit and only player who are in game should get hit (its his own ability)
 
         //console.log(lookVector);
-        if(isPointInCone(clientList[i].position, {startPosition: clientList[clientListIndex].position, maxAngle: 0.3, coneLength: 2, coneLookvector: lookVector})) {
+        if(isPointInCone(clientList[i].position, {startPosition: clientList[clientListIndex].position, maxAngle: 0.7, coneLength: 2, coneLookvector: lookVector})) {
           //player is in cone -> damage player
           console.log("player is inside cone")
           clientList[i].hp -= mainAttackDamage[characterId];          
           sendAll({header: "playerHit", data: {playerId: clientList[i].id, damage: mainAttackDamage[characterId]}});
 
-          if (clientList[i].hp < 0) {
+          if (clientList[i].hp <= 0) {
             //player died
             killPlayer(clientList[i].id);
           }
@@ -396,12 +423,13 @@ function attackForward(playerId, characterId) {
       }
     } else if (characterId == 4) { //coffee can
       //check if someone is hit by the raycast
-      console.log("attacking with coffee can!")
+      //console.log("attacking with coffee can!")
       raycaster = new THREE.Raycaster();
       raycaster.set(new THREE.Vector3(...clientList[clientListIndex].position), lookVector.normalize(), 0.1, 200);
       const intersects = raycaster.intersectObjects(scene.children);
       
       if (intersects.length > 0) {
+        sendAll({header: "drawEffect", data: {effectType: 0,  color: 0xfcba03, startPosition: clientList[clientListIndex].position, endPosition: [intersects[0].point.x, intersects[0].point.y, intersects[0].point.z]}})
         if (intersects[0].object.name.indexOf("player") > -1) {
           //player got hit
           console.log(intersects[0].object.name.slice(10));
@@ -411,7 +439,7 @@ function attackForward(playerId, characterId) {
           clientList[clients.get(id)].hp -= mainAttackDamage[characterId]; 
           sendAll({header: "playerHit", data: {playerId: id, damage: mainAttackDamage[characterId]}});
 
-          if (clientList[clients.get(id)].hp < 0) {
+          if (clientList[clients.get(id)].hp <= 0) {
             //player died
             killPlayer(id);
           }
@@ -521,7 +549,7 @@ wss.on('connection', (ws) => {
         if (message.data.action == 1) { //player wants to start shooting
           
           if(myclient.mainAttackInfo == undefined) { //first time shooting, create mainAttackInfo
-            clientList[clientListIndex].mainAttackInfo = {timeStampOfLastShot: 0, wantsToShoot: true, isCurrentlyShooting: false, interval: undefined};
+            clientList[clientListIndex].mainAttackInfo = {timeStampOfLastShot: 0, wantsToShoot: true, isCurrentlyShooting: false, interval: undefined, ammunition: mainAttackMaxAmmoCapacity[message.data.characterId], isReloading: false};
             myclient = clientList[clientListIndex];
           } 
 
@@ -530,9 +558,13 @@ wss.on('connection', (ws) => {
           if (Date.now() - myclient.mainAttackInfo.timeStampOfLastShot > timeBetweenShots[message.data.characterId][0] * 1000) { 
             //enough time passed since last shot, start interval with shoot frequency
             clientList[clientListIndex].mainAttackInfo.isCurrentlyShooting = true;
-            console.log("started interval");
+            //console.log("started interval");
 
             //attack
+            //console.log(clientList[clientListIndex].mainAttackInfo.ammunition);
+            //console.log(message.data.characterId == 0);
+            if (attackType == 0 && clientList[clientListIndex].mainAttackInfo.isReloading == false && clientList[clientListIndex].mainAttackInfo.ammunition > 0 && message.data.characterId == 0) sendAll({header: "drawEffect", data: {effectType: 1, playerId: id, action: 0}});
+
             attackForward(id, message.data.characterId, message.data.rotationCamera); //call attackForward manually the first time, because setInterval calls it not until after the specified wait time
             clientList[clientListIndex].mainAttackInfo.interval = setInterval(attackForward, timeBetweenShots[message.data.characterId][0] * 1000, id, message.data.characterId, message.data.rotationCamera);
 
@@ -543,9 +575,12 @@ wss.on('connection', (ws) => {
               if (clientList[clientListIndex].mainAttackInfo.wantsToShoot) { //check if player still wants to shoot
                 //enough time passed since last shot, start interval with shoot frequency
                 clientList[clientListIndex].mainAttackInfo.isCurrentlyShooting = true;
-                console.log("started interval");
+                //console.log("started interval");
 
                 //attack
+                //console.log(clientList[clientListIndex].mainAttackInfo.ammunition > 0 && message.data.characterId == 0);
+                if (attackType == 0 && clientList[clientListIndex].mainAttackInfo.isReloading == false && clientList[clientListIndex].mainAttackInfo.ammunition > 0 && message.data.characterId == 0) sendAll({header: "drawEffect", data: {effectType: 1, playerId: id, action: 0}});
+
                 attackForward(id, message.data.characterId, message.data.rotationCamera); //call attackForward manually the first time, because setInterval calls it not until after the specified wait time
                 clientList[clientListIndex].mainAttackInfo.interval = setInterval(attackForward, timeBetweenShots[message.data.characterId][0] * 1000, id, message.data.characterId, message.data.rotationCamera);    
               }
@@ -554,8 +589,10 @@ wss.on('connection', (ws) => {
 
         } else { //player wants to stop shooting
           //clear interval
+          if (attackType == 0) sendAll({header: "drawEffect", data: {effectType: 1, playerId: id, action: 1}}); //action 1 = stop shooting
+
           if (clientList[clientListIndex].mainAttackInfo == undefined) return; //should never happen, but still just in case check if its even defined
-          console.log("cleared interval");
+          //console.log("cleared interval");
           clearInterval(clientList[clientListIndex].mainAttackInfo.interval);
           clientList[clientListIndex].mainAttackInfo.wantsToShoot = false;
           clientList[clientListIndex].mainAttackInfo.isCurrentlyShooting = false;
@@ -579,14 +616,21 @@ wss.on('connection', (ws) => {
         } else if (message.data.characterId == 2) {
           //mixer
           const constFactor = 0.01
+          const factor = constFactor * (message.data.velocityFactor * 2 + 0.5);
 
+          let lookVector = getLookVector(new THREE.Vector3(...clientList[clientListIndex].cameraPos), new THREE.Vector3(...clientList[clientListIndex].lookVector), new THREE.Vector3(...clientList[clientListIndex].position), 0.1, 200);
+          lookVector = lookVector.normalize();
+          //console.log(lookVector);
+          maxVelocityVector = [lookVector.x * factor, lookVector.y * factor, lookVector.z * factor];
+
+        } else if (message.data.characterId == 3) {
+          //knife block
+          const constFactor = 1;
           let lookVector = getLookVector(new THREE.Vector3(...clientList[clientListIndex].cameraPos), new THREE.Vector3(...clientList[clientListIndex].lookVector), new THREE.Vector3(...clientList[clientListIndex].position), 0.1, 200);
           lookVector = lookVector.normalize();
           //console.log(lookVector);
           maxVelocityVector = [lookVector.x * constFactor, lookVector.y * constFactor, lookVector.z * constFactor];
 
-        } else if (message.data.characterId == 3) {
-          //knife block
 
         }
         shootSlotAmmunition(message.data.characterId, id, maxVelocityVector);
@@ -604,8 +648,28 @@ wss.on('connection', (ws) => {
 
       //console.log(pos);
       sendAll({header: "playerJoined", data: {position: pos, playerId: id, characterId: myclient.characterId}});
+
     } else if (message.header == "changedCharacter" ) {
+      delete clientList[clients.get(id)].mainAttackInfo; //now a new character is used, clean up old data
       clientList[clients.get(id)].characterId = message.data.characterId;
+
+    } else if (message.header == "reloading") {
+      console.log("wants to reload")
+      if (myclient.mainAttackInfo != undefined) {
+        if (myclient.mainAttackInfo.ammunition != mainAttackMaxAmmoCapacity[myclient.characterId] &&  myclient.mainAttackInfo.isReloading == false) {
+          //begins reloading
+          myclient.mainAttackInfo.isReloading = true;
+          console.log("starts reloading")
+
+          //reload
+          setTimeout(() => {
+            console.log("reloaded");
+            myclient.mainAttackInfo.ammunition = mainAttackMaxAmmoCapacity[myclient.characterId];
+            myclient.mainAttackInfo.isReloading = false;
+          }, timeBetweenShots[myclient.characterId][1] * 1000) //*1000 because its in seconds and setTimeout wants milliseconds
+
+        }
+      }
     }
   });
 

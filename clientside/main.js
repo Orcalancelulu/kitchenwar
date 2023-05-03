@@ -24,6 +24,8 @@ let chunkSize = 12;
 let chunkXYToIndex;
 let chunkList;
 
+let particleSystemObjects = {};
+
 let mapData;
 
 let playerIdToIndex = new Map();
@@ -36,7 +38,14 @@ let getColliderCoordsDebuggingZ = [];
 let getColliderCoordsDebuggingY = [];
 
 let moveVector = [0, 0];
-let keyMapList = {"KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, "Space": {exfunc: () => wantToJump()}};
+
+let keyMapList = {
+  "KeyW": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += -1}}, 
+  "KeyS": {exfunc: () => {if(playerList[0].isGrounded) moveVector[0] += 1}}, 
+  "KeyA": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += -1}}, 
+  "KeyD": {exfunc: () => {if(playerList[0].isGrounded) moveVector[1] += 1}}, 
+  "Space": {exfunc: () => wantToJump()},
+};
 
 //movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger) speedmode
 let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
@@ -44,7 +53,7 @@ let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, i
 let movementData = movementDataPresets[0];
 
 let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster2.glb", "models/mixer/mixer.glb", "models/knife_block/knife_block.glb", "models/coffee_can/coffee_can.glb"];
-let projectileModelPaths = ["", "models/toaster/toast.glb", "", "", ""]
+let projectileModelPaths = ["", "models/toaster/toast.glb", "models/mixer/mixer_projectile.glb", "", ""]
 
 let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5], [0.4, 0.9, 0.4], [0.4, 1, 0.4], [0.4, 1.1, 0.4]];
 let playerSize = [0.4, 1, 0.4];
@@ -68,6 +77,27 @@ let projectileList = [];
 let particleGeo = new THREE.BufferGeometry(); //debugging
 
 let timeStampForMainAttackCharge;
+
+const particleVertexShader = `    
+  varying vec3 vColor;
+  attribute float lifeCycleFactor;
+  varying float lifeCycleFactorForFragment;
+  void main() {
+    
+    lifeCycleFactorForFragment = lifeCycleFactor;
+    vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+    gl_PointSize = ( 300.0 / -mvPosition.z ) * (0.8 * lifeCycleFactor + 0.2);
+    gl_Position = projectionMatrix * mvPosition;
+  }`
+
+const particleFragmentShader = `	
+  uniform sampler2D pointTexture;
+  varying vec3 vColor;
+  varying float lifeCycleFactorForFragment;
+  void main() {
+    gl_FragColor = vec4( vec3(1.0, 1.0, 1.0), 1.0 - lifeCycleFactorForFragment);
+    gl_FragColor = gl_FragColor * texture2D( pointTexture, gl_PointCoord );
+  }`
 
 
 
@@ -93,8 +123,12 @@ let whereToMoveAtCollision = {
 
 //anfang debugging
 
+//11000011111011011111001100100100111110010
+//11011011111001100100100111110010
+
 
 function particleTesting() {
+
 
   let uniforms = {
 
@@ -142,14 +176,11 @@ function particleTesting() {
     
     transparent: true,
     depthWrite: false
-    //vertexColors: true
 
   } );
 
 
   const particleCount = 32;
-
-  
 
   const positions = [];
   const velocities = [];
@@ -177,7 +208,7 @@ function particleTesting() {
     lifeCycleFactor.push(0);
   } 
 
-  particleGeo.setAttribute( 'position', new THREE.Float32BufferAttribute(positions, 3)); //3 means 3 per particle
+  particleGeo.setAttribute( 'position', new THREE.Float32BufferAttribute(positions, 3)); //3 means 3 per particle (32 bits is the maximum :| )
   particleGeo.setAttribute( 'velocities', new THREE.Float32BufferAttribute(velocities, 3));
   particleGeo.setAttribute( 'startTimeStamp', new THREE.Float32BufferAttribute(startTimeStamp, 1));
   particleGeo.setAttribute( 'isVisible', new THREE.Float32BufferAttribute(isVisible, 1));
@@ -650,7 +681,12 @@ const removePlayer = (id) => {
   console.log("removed player");
   
   let index = playerIdToIndex.get(id);
+
   scene.remove(playerList[index].model);
+
+  removeParticleSystem(playerList[index].particleSystemId);
+
+
   playerIdToIndex.delete(id);
   playerList.splice(index, 1);
   
@@ -953,7 +989,165 @@ function moveSmoothCamera() {
 
 }
 
+//removes specified particle system
+function removeParticleSystem(id) {
+  if (id == undefined) return;
+  scene.remove(particleSystemObjects[id].particleObj);
+  delete particleSystemObjects[id];
+
+}
+
+
+function updateParticles() {
+  Object.keys(particleSystemObjects).forEach((key) => {
+    let particleSystemType = particleSystemObjects[key].particleSystemType;
+    let particleSystem = particleSystemObjects[key].particleObj;
+
+    if (particleSystemType == 0) { //trails
+      let positions = particleSystem.geometry.attributes.position.array;
+      let lifeCycleFactor = particleSystem.geometry.attributes.lifeCycleFactor.array;
+
+      let pointList = particleSystemObjects[key].pointList;
+
+      const particleSize = particleSystemObjects[key].particleSize;
+
+      
+      for (var i = 0; i < positions.length / 3; i++) {
+        if (pointList[i] == undefined) continue;
+
+        positions[3*i + 0] = pointList[i][0];
+        positions[3*i + 1] = pointList[i][1];
+        positions[3*i + 2] = pointList[i][2];
+
+        lifeCycleFactor[i] = (i / pointList.length) * particleSize;
+      }
+
+      particleSystem.geometry.attributes.lifeCycleFactor.needsUpdate = true;
+      particleSystem.geometry.attributes.position.needsUpdate = true;    
+
+    } else if (particleSystemType == 1) { //explosions, one time only
+
+      let positions = particleSystem.geometry.attributes.position.array;
+      let lifeCycleFactor = particleSystem.geometry.attributes.lifeCycleFactor.array;
+      let velocities = particleSystem.geometry.attributes.velocities.array;
+      let startTimeStamp = particleSystem.geometry.attributes.startTimeStamp.array; //individual timestamp, so some particles can be differemt sizes
+
+      const dragFactor = particleSystemObjects[key].dragFactor;
+      const gravityFactor = particleSystemObjects[key].gravityFactor;
+      const uniformStartTimeStamp = particleSystemObjects[key].uniformStartTimeStamp; //time when particleSystem was created
+      const particleSpeed = particleSystemObjects[key].particleSpeed; //time when particleSystem was created
+      const particleSize = particleSystemObjects[key].particleSize;
+
+      const currentTime = (Date.now() << 1) >>> 1; //damit currentTime weniger bits braucht und in einem 32 bit Float platz hat
+      const timeFactor = particleSystemObjects[key].timeFactor;
+
+
+      if ((currentTime - uniformStartTimeStamp) * timeFactor > 1) {
+        //delete particle System, particle animation is at its end
+        console.log("removing explosion");
+        removeParticleSystem(key);
+
+      } else {
+          
+        for (var i = 0; i < positions.length / 3; i++) {
+          positions[3*i + 0] += velocities[3*i + 0] * particleSpeed;
+          positions[3*i + 1] += velocities[3*i + 1] * particleSpeed;
+          positions[3*i + 2] += velocities[3*i + 2] * particleSpeed;
+
+          velocities[3*i + 0] = velocities[3*i + 0] * (1-dragFactor);
+          velocities[3*i + 1] = velocities[3*i + 1] * (1-dragFactor) - gravityFactor;
+          velocities[3*i + 2] = velocities[3*i + 2] * (1-dragFactor);
+
+          lifeCycleFactor[i] = (1-(currentTime-startTimeStamp[i])*timeFactor) * particleSize;
+          if (lifeCycleFactor[0] < 0) lifeCycleFactor[i] = 0;        
+        }
+
+        particleSystem.geometry.attributes.lifeCycleFactor.needsUpdate = true;
+        particleSystem.geometry.attributes.position.needsUpdate = true;    
+        particleSystem.geometry.attributes.velocities.needsUpdate = true;
+
+      }
+    } else if (particleSystemType == 2) { //looping animations like flamethrower from kettle
+      let positions = particleSystem.geometry.attributes.position.array;
+      let lifeCycleFactor = particleSystem.geometry.attributes.lifeCycleFactor.array;
+      let velocities = particleSystem.geometry.attributes.velocities.array;
+      let startTimeStamp = particleSystem.geometry.attributes.startTimeStamp.array; //individual timestamp, so some particles can be differemt sizes
+      let isVisible = particleSystem.geometry.attributes.isVisible.array;
+
+      const particleSpeed = particleSystemObjects[key].particleSpeed;
+      const coneLength = particleSystemObjects[key].coneLength;
+      const playerId = particleSystemObjects[key].playerId;
+
+      const currentTime = (Date.now() << 1) >>> 1;
+
+      let particlesToCreate = 0;
+      let localLookVector;
+
+      const playerListIndex = playerIdToIndex.get(playerId);
+
+          
+      if (particleSystemObjects[key].active) { //button is being held down, player is attacking -> particles are needed
+        particlesToCreate = 1;
+
+        let lookVector = getLookDirectionOfObject(playerList[playerListIndex].model);
+        
+        localLookVector = new THREE.Vector3().copy(lookVector);
+        let randomDirection = new THREE.Vector3().randomDirection().multiplyScalar(0.4);
+        localLookVector.add(randomDirection).normalize();  
+
+      }
+          
+      //for each particle in this particle system
+      for (var i = 0; i< positions.length/3; i++) {
+        let timeFactor = (particleSpeed * (currentTime - startTimeStamp[i])); //gives a number between 0 and 1, triangle graph
+
+        if (isVisible[i] == 1) {
+          //check if it should be deleted
+          //console.log(timeFactor)
+          if (timeFactor > 1) {
+            isVisible[i] = 0; 
+            lifeCycleFactor[i] = 0;
+
+            positions[3*i + 0] = 0;
+            positions[3*i + 1] = 0;
+            positions[3*i + 2] = 0;
+
+            continue;
+          } 
+
+          lifeCycleFactor[i] = timeFactor;
+
+          positions[3*i + 0] = velocities[3*i + 0] * timeFactor * coneLength + playerList[playerListIndex].position[0];
+          positions[3*i + 1] = velocities[3*i + 1] * timeFactor * coneLength + playerList[playerListIndex].position[1];
+          positions[3*i + 2] = velocities[3*i + 2] * timeFactor * coneLength + playerList[playerListIndex].position[2];
+
+        } else if(particlesToCreate > 0) {
+          isVisible[i] = 1;
+          lifeCycleFactor[i] = 2;
+
+          positions[3*i + 0] = 0;
+          positions[3*i + 1] = 0; //hier falls nötig offset anpassen
+          positions[3*i + 2] = 0;
+
+          velocities[3*i + 0] = -localLookVector.x;
+          velocities[3*i + 1] = -localLookVector.y;
+          velocities[3*i + 2] = -localLookVector.z;
+
+          startTimeStamp[i] = currentTime;
+
+          particlesToCreate -= 1;
+        }
+      }
+      
+      particleSystem.geometry.attributes.lifeCycleFactor.needsUpdate = true;
+      particleSystem.geometry.attributes.position.needsUpdate = true;    
+      particleSystem.geometry.attributes.velocities.needsUpdate = true;
+    }
+  });
+}
+
 function updateTestParticles() {
+
 
   //moveObject(particleSystem, playerList[0].position);
 
@@ -967,9 +1161,9 @@ function updateTestParticles() {
 
   const particleSpeed = 0.002;
   const coneLength = 2;
-  const currentTime = Date.now() - 1682400000000; //minus diese Zahl, damit currentTime weniger bits braucht und in einem 32 bit Float platz hat
+  const currentTime = (Date.now() << 1) >>> 1; //damit currentTime weniger bits braucht und in einem 32 bit Float platz hat
   
-  //console.log(timeFactor);
+  //console.log(currentTime);
   
   let particlesToCreate = 0;
   let localLookVector;
@@ -1053,7 +1247,8 @@ function animate() {
   stats.update() //stats
 
 
-  updateTestParticles();
+  //updateTestParticles();
+  updateParticles();
  
   renderer.render(scene, camera);
 };
@@ -1258,7 +1453,9 @@ const createListener = () => {
   document.body.addEventListener("keyup", (event) => {
     isKeyPressed.keyCodes[event.code] = false;
 
-    //y and z are swapped because keyboard
+    if (event.code == "KeyR") ws.send(JSON.stringify({header: "reloading"}));
+
+    //y and z are swapped because QWERTZ
     if (event.code == "KeyX") getColliderCoordsDebuggingX[getColliderCoordsDebuggingX.length] = getCoordsOfRaycast("x");
     if (event.code == "KeyY") getColliderCoordsDebuggingZ[getColliderCoordsDebuggingZ.length] = getCoordsOfRaycast("z");
     if (event.code == "KeyZ") getColliderCoordsDebuggingY[getColliderCoordsDebuggingY.length] = getCoordsOfRaycast("y");
@@ -1338,13 +1535,93 @@ spotLight.penumbra = 0.7;
 
 //ende debugging
 
+function createParticleObject(particleSystemOptions) {
+  
+  let particleGeometry = new THREE.BufferGeometry();
+  let uniforms = {
+    pointTexture: {value: new THREE.TextureLoader().load(particleSystemOptions.texture)}
+  };
 
-function createNewProjectile(position, projectileType, id, index) {
-  //console.log(id);
-  return {position: position, type: projectileType, id: id, model: createProjectileModel(projectileType, index)};
+  const shaderMaterial = new THREE.ShaderMaterial({
+    uniforms: uniforms, //attribute float size; varying vec3 vColor;
+    vertexShader: particleSystemOptions.vertexShader, 
+    fragmentShader: particleSystemOptions.fragmentShader,
+    transparent: true,
+    depthWrite: false
+  });
+
+  const particleCount = particleSystemOptions.maxParticles;
+
+  const positions = [];
+  const velocities = [];
+  const startTimeStamp = [];
+  const isVisible = [];
+  const lifeCycleFactor = [];
+
+
+  for (var i = 0; i<particleCount; i++) {
+
+    positions.push(0); 
+		positions.push(0);
+		positions.push(0);
+
+    lifeCycleFactor.push(0);
+
+    if (particleSystemOptions.particleSystemType == 1) {
+
+      //generate random angle from 0 tp 360 degrees (here in radians). This will give an explosion circle
+      let randomAngle = Math.random()*6.28318531 //2*PI etwa 6.28318531
+
+      velocities.push(Math.cos(randomAngle)); 
+      velocities.push(0);
+      velocities.push(Math.sin(randomAngle));  
+
+      startTimeStamp.push(((Date.now() << 1) >>> 1)-200); //this converts 64bit number to 32bits. Bits at beginning get cut off but does not matter, because it will not run for years, so 32bit doesn't overflow (normally it would use 41 bits)
+
+    } 
+    if (particleSystemOptions.particleSystemType == 2) {
+      velocities.push(0); //placeholder
+      velocities.push(0);
+      velocities.push(0);  
+
+      startTimeStamp.push(0); //placeholder
+      isVisible.push(0); //0 = not visible
+    }
+  } 
+
+
+  particleGeometry.setAttribute( 'position', new THREE.Float32BufferAttribute(positions, 3)); //3 means 3 per particle (32 bits is the maximum :| )
+  particleGeometry.setAttribute( 'lifeCycleFactor', new THREE.Float32BufferAttribute(lifeCycleFactor, 1));
+
+  if (particleSystemOptions.particleSystemType != 0) {
+    particleGeometry.setAttribute( 'velocities', new THREE.Float32BufferAttribute(velocities, 3));
+    particleGeometry.setAttribute( 'startTimeStamp', new THREE.Float32BufferAttribute(startTimeStamp, 1));  
+  }
+
+  if (particleSystemOptions.particleSystemType == 2) {
+    particleGeometry.setAttribute( 'isVisible', new THREE.Float32BufferAttribute(isVisible, 1));
+  }
+
+  let particleSystem = new THREE.Points( particleGeometry, shaderMaterial);
+  particleSystem.frustumCulled = false; //so its visible, even if the main coordinate is not
+
+  scene.add(particleSystem);
+  moveObject(particleSystem, particleSystemOptions.position);
+  
+  return particleSystem;
 }
 
-function createProjectileModel(projectileType, index) {
+
+function createNewProjectile(position, projectileType, id, index, velocity) {
+  //console.log(id);
+  const trailId = uuidv4();
+  const maxParticles = 10;
+  particleSystemObjects[trailId] = {id: trailId, particleSize: 0.2, particleSystemType: 0, pointList: [], maxPointListLength: maxParticles, particleObj: createParticleObject({texture: "texture/wasserdampf.png", vertexShader: particleVertexShader, fragmentShader: particleFragmentShader, maxParticles: maxParticles, particleSystemType: 0, position: [0, 0, 0]})}
+  console.log(particleSystemObjects);
+  return {position: position, type: projectileType, id: id, trailId: trailId, model: createProjectileModel(projectileType, index, velocity)};
+}
+
+function createProjectileModel(projectileType, index, velocity) {
 
   let modelPath = projectileModelPaths[projectileType];
   if (modelPath == "" || modelPath == undefined) modelPath = "model/dummy_projectile.glb";
@@ -1353,6 +1630,11 @@ function createProjectileModel(projectileType, index) {
   loader.load(modelPath, function ( gltf ) {
     //gltf.scene.scale.set(1, 1, 1);
     scene.add(gltf.scene);
+
+    let rotationMatrix = new THREE.Matrix4().lookAt(new THREE.Vector3(...velocity).normalize(), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+    let newQuaternion = new THREE.Quaternion().setFromRotationMatrix(rotationMatrix);
+    gltf.scene.quaternion.copy(newQuaternion);
+
     scene.remove(projectileList[index].model)
     projectileList[index].model = gltf.scene;
   });
@@ -1388,16 +1670,30 @@ function updateProjectiles(serverProjectileList) {
       projectileList[indexOfFoundId].position = serverProjectileList[i].position;
       //console.log(projectileList[indexOfFoundId].model);
       moveObject(projectileList[indexOfFoundId].model, projectileList[indexOfFoundId].position);
+
+      let rotationMatrix = new THREE.Matrix4().lookAt(new THREE.Vector3(...serverProjectileList[i].velocity).normalize(), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0));
+      let newQuaternion = new THREE.Quaternion().setFromRotationMatrix(rotationMatrix);
+      projectileList[indexOfFoundId].model.quaternion.copy(newQuaternion);
+
+      //update points in trail particle object
+      particleSystemObjects[projectileList[indexOfFoundId].trailId].pointList.push(projectileList[indexOfFoundId].position);
+
+      //check if there are to many points in list
+      if (particleSystemObjects[projectileList[indexOfFoundId].trailId].pointList.length > particleSystemObjects[projectileList[indexOfFoundId].trailId].maxPointListLength) {
+        //too many items in list, delete first one
+        particleSystemObjects[projectileList[indexOfFoundId].trailId].pointList.shift();
+      }
+
       
       //delete item from copylist
       projectileIdsListCopy.splice(indexOfFoundId, 1);
 
     } else {
       //projectile is not yet in list
-
+      
       //create and add item in list
-      projectileList.push(createNewProjectile(serverProjectileList[i].position, serverProjectileList[i].constants.projectileType, id, projectileList.length))
-      console.log("created: " + id);
+      projectileList.push(createNewProjectile(serverProjectileList[i].position, serverProjectileList[i].constants.projectileType, id, projectileList.length, serverProjectileList[i].velocity))
+      //console.log("created: " + id);
     }
   }
   //all projectiles left in projectileIdsListCopy should be deleted (maybe they hit a player or object)
@@ -1406,9 +1702,19 @@ function updateProjectiles(serverProjectileList) {
 
     if (projectileIdsListCopy.indexOf(projectileToCheck.id) > -1) {
       //this projectile should be deleted
+
+      //delete trail
+      removeParticleSystem(projectileList[i].trailId);
+
+      //add explosion particles
+      const particleId = uuidv4();
+      particleSystemObjects[particleId] = {particleSize: 1, particleSpeed: 0.01, timeFactor: 0.001,dragFactor: 0.01, gravityFactor: 0.0, uniformStartTimeStamp: (Date.now() << 1) >>> 1, id: particleId, particleSystemType: 1, particleObj: createParticleObject({texture: "texture/wasserdampf.png", vertexShader: particleVertexShader, fragmentShader: particleFragmentShader, maxParticles: 32, particleSystemType: 1, position: projectileList[i].position})}
+      console.log(particleSystemObjects);
+      //delete projectile
       scene.remove(projectileList[i].model);
-      console.log("Deleted: "+projectileList[i].id + "because of: " + projectileIdsListCopy);
       projectileList.splice(i, 1);
+
+
     }
   }
 }
@@ -1439,9 +1745,18 @@ function rayChecker(startVec, dirVec, near, far) {
   }
 }
 
+//erstellt eine zufällige Id für einen neuen Client (es wäre theoretisch möglich 2 gleiche uuidv4s zu erstellen...), Funktion nicht von mir, quelle
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 
-particleTesting();
+
+
+//particleTesting();
 
 /*end of THREE code
 
@@ -1449,7 +1764,15 @@ particleTesting();
 
 start of websocket code*/
 
-const ws = new WebSocket("ws://localhost:7031"); //wss://kitchenwar-backend.onrender.com
+const shouldConnectToLocalHost = false;
+
+let ws;
+
+if (shouldConnectToLocalHost) {
+  ws = new WebSocket("ws://localhost:7031");
+} else {
+  ws = new WebSocket("wss://kitchenwar-backend.onrender.com");
+}
 
 ws.onopen = function(event) {
   console.log("ws is open!");
@@ -1512,5 +1835,49 @@ ws.onmessage = (event) => {
   } else if (message.header == "updateOfProjectiles") {
     //message.data.projectileList has all projectiles in the scene
     updateProjectiles(message.data.projectileList);
-  } 
+  } else if (message.header == "drawEffect") {
+
+    if (message.data.effectType == 0) {
+      //line
+      const material = new THREE.LineBasicMaterial({
+        color: message.data.color,
+        transparent: true
+      });
+            
+      const points = [];
+      points.push(new THREE.Vector3(...message.data.startPosition));
+      points.push(new THREE.Vector3(...message.data.endPosition));
+
+      const geometry = new THREE.BufferGeometry().setFromPoints( points );
+
+      const line = new THREE.Line( geometry, material );
+      scene.add(line);
+      line.material.opacity = 0.6;
+      let lineInterval = setInterval(() => {
+        line.material.opacity -= 0.199
+        if (line.material.opacity < 0.05) {
+          clearInterval(lineInterval);
+          scene.remove(line);
+          console.log("deleted");
+        }
+      }, 40)
+            
+    } else if (message.data.effectType == 1) {
+      if (message.data.action == 0) {
+        //start particleanimation
+        if (playerList[playerIdToIndex.get(message.data.playerId)].particleSystemId == undefined) {
+          //never shot before, creating particle system
+          const particleSystemId = uuidv4();
+          playerList[playerIdToIndex.get(message.data.playerId)].particleSystemId = particleSystemId;
+          particleSystemObjects[particleSystemId] = {particleSystemType: 2, id: particleSystemId, active: false, playerId: message.data.playerId, particleSize: 1.2, particleSpeed: 0.002, coneLength: 2, particleObj: createParticleObject({texture: "texture/wasserdampf.png", fragmentShader: particleFragmentShader, vertexShader: particleVertexShader, maxParticles: 30, particleSystemType: 2, position: [0, 0, 0]})}
+          
+        }
+        particleSystemObjects[playerList[playerIdToIndex.get(message.data.playerId)].particleSystemId].active = true;
+
+      } else {
+        //stop particle animation
+        particleSystemObjects[playerList[playerIdToIndex.get(message.data.playerId)].particleSystemId].active = false;
+      }
+    }
+  }
 }
