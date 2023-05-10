@@ -125,7 +125,7 @@ function calcPhysics() {
         let distance = getDistanceBetweenArrayVector(player.position, position);
         //console.log(projectileList.length);
         //console.log(distance)
-
+        if (projectileList[i].constants == undefined) return;
         if (distance < projectileList[i].constants.minDistanceToHit && projectileList[i].constants.playerId != player.id) { //if the distance to the player is to small (so projectile touches player), !!here!!, muss besser gemacht werden,  jetzt wird Entfernung nur von Mittelpunkt gemessen, nicht von den Ecken des Spielers
           //player is hit
 
@@ -420,6 +420,7 @@ function isPointInCone(point, coneObject) {
 }
 
 function attackForward(playerId, characterId) {
+  if (clientList[clientListIndex].mainAttackInfo.timeStampOfLastShot == undefined || clientList[clientListIndex].mainAttackInfo.ammunition == undefined) return;
 
   let clientListIndex = clients.get(playerId);
   let lookVector = clientList[clientListIndex].lookVector; //camera looks like this, but not playermodel, therefore raycast from camera and make vector between point hit and model Position

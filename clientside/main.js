@@ -65,10 +65,6 @@ let projectileModelPaths = ["", "models/toaster/toast.glb", "models/mixer/mixer_
 let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5], [0.4, 0.9, 0.4], [0.4, 1, 0.4], [0.4, 1.1, 0.4]];
 let playerSize = [0.4, 1, 0.4];
 
-let mixer;
-let needsKettleParticles = false;
-const maxParticleCount = 100;
-
 let controls;
 let isInGame = false;
 let isInMenu = true;
