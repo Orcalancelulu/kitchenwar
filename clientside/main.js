@@ -1628,7 +1628,7 @@ function uuidv4() {
 
 start of websocket code*/
 
-const shouldConnectToLocalHost = true;
+const shouldConnectToLocalHost = false;
 
 let ws;
 
