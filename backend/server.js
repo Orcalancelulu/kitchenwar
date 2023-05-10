@@ -153,6 +153,8 @@ function killPlayer(playerId) {
 
   clientList[clients.get(playerId)].isInGame = false;
   clientList[clients.get(playerId)].hp = 100; //debugging, später noch anders
+  delete clientList[clients.get(playerId)].mainAttackInfo;
+
 
   scoreBoard[playerId].score = Math.floor(scoreBoard[playerId].score * 0.5); //loose half your points on death
   sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
@@ -263,6 +265,7 @@ function shootSlotAmmunition(characterId, playerId, velocityVector) {
 }
 
 function sendSlotsAmmoInfo(mainAttackInfo, characterId, playerId, shouldCheckLater) {
+    if (mainAttackInfo.slotsInfo == undefined || clientList[clients.get(playerId)] == undefined) return;
     //send client how much ammo he has left
     let currentAmmo = 0;
     //check each slot if it has ammo ready
@@ -420,9 +423,10 @@ function isPointInCone(point, coneObject) {
 }
 
 function attackForward(playerId, characterId) {
+  let clientListIndex = clients.get(playerId);
+
   if (clientList[clientListIndex].mainAttackInfo.timeStampOfLastShot == undefined || clientList[clientListIndex].mainAttackInfo.ammunition == undefined) return;
 
-  let clientListIndex = clients.get(playerId);
   let lookVector = clientList[clientListIndex].lookVector; //camera looks like this, but not playermodel, therefore raycast from camera and make vector between point hit and model Position
   lookVector = new THREE.Vector3(...lookVector); //convert lookVector from array to threeJs vector
   lookVector = getLookVector(new THREE.Vector3(...clientList[clientListIndex].cameraPos), lookVector, new THREE.Vector3(...clientList[clientListIndex].position), 0.1, 200);
@@ -624,6 +628,7 @@ wss.on('connection', (ws) => {
             if (attackType == 0 && clientList[clientListIndex].mainAttackInfo.isReloading == false && clientList[clientListIndex].mainAttackInfo.ammunition > 0 && message.data.characterId == 0) sendAll({header: "drawEffect", data: {effectType: 1, playerId: id, action: 0}});
 
             attackForward(id, message.data.characterId, message.data.rotationCamera); //call attackForward manually the first time, because setInterval calls it not until after the specified wait time
+            clearInterval(clientList[clientListIndex].mainAttackInfo.interval); //if there was a bug and the old interval was not deleted (maybe network fails...)
             clientList[clientListIndex].mainAttackInfo.interval = setInterval(attackForward, timeBetweenShots[message.data.characterId][0] * 1000, id, message.data.characterId, message.data.rotationCamera);
 
           } else {
@@ -640,6 +645,7 @@ wss.on('connection', (ws) => {
                 if (attackType == 0 && clientList[clientListIndex].mainAttackInfo.isReloading == false && clientList[clientListIndex].mainAttackInfo.ammunition > 0 && message.data.characterId == 0) sendAll({header: "drawEffect", data: {effectType: 1, playerId: id, action: 0}});
 
                 attackForward(id, message.data.characterId, message.data.rotationCamera); //call attackForward manually the first time, because setInterval calls it not until after the specified wait time
+                clearInterval(clientList[clientListIndex].mainAttackInfo.interval); //if there was a bug and the old interval was not deleted (maybe network fails...)
                 clientList[clientListIndex].mainAttackInfo.interval = setInterval(attackForward, timeBetweenShots[message.data.characterId][0] * 1000, id, message.data.characterId, message.data.rotationCamera);    
               }
             }, timeBetweenShots[message.data.characterId][0] * 1000 - (Date.now() - myclient.mainAttackInfo.timeStampOfLastShot))
@@ -705,6 +711,7 @@ wss.on('connection', (ws) => {
       clientList[clients.get(id)].isInGame = true;
 
       //console.log(pos);
+      sendTo({header: "ammoDetails", data: {maxAmmo: mainAttackMaxAmmoCapacity[myclient.characterId], currentAmmo: mainAttackMaxAmmoCapacity[myclient.characterId], state: 0}}, myclient.ws);
       sendAll({header: "playerJoined", data: {position: pos, playerId: id, characterId: myclient.characterId}});
 
     } else if (message.header == "changedCharacter" ) {
@@ -752,7 +759,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-//erstellt eine zufällige Id für einen neuen Client (es wäre theoretisch möglich 2 gleiche uuidv4s zu erstellen...), Funktion nicht von mir, quelle
+//erstellt eine zufällige Id für einen neuen Client (es wäre theoretisch möglich 2 gleiche uuidv4s zu erstellen...), Funktion nicht von mir, quelle: https://ably.com/blog/web-app-websockets-nodejs
 function uuidv4() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
