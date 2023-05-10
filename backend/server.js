@@ -13,13 +13,15 @@ let physicsLoopWaitTime = 16; //16 => 1000/16 = 60 times per second
 
 const clients = new Map();
 
+let scoreBoard = {};
+
 let raycaster;
 
 //zum testen mal hardcoded. später soll es noch aus einem file kommen
 let menueSpawnPos = [-40, 5, -40];
 
 let characterMainWeaponType = [0, 1, 1, 1, 2]; //this means, at index 0 (kettle) has type 0, index 1 (toaster) has type 1, index 2 (mixer) has type 1, index 3 (knifeblock) has type 1, index 4 (coffee can) has type 2
-let mainAttackMaxAmmoCapacity = [100, 2, 2, 6, 200] //how much ammunition / slots / power each character has
+let mainAttackMaxAmmoCapacity = [20, 2, 2, 6, 20] //how much ammunition / slots / power each character has
 let mainAttackDamage = [20, 100, 50, 20, 10];
 let timeBetweenShots = [[0.25, 4], [1, 8], [2, 10], [0.2, 10], [0.2, 2]] //1. number = time between shots, 2. number = reload / refillpersecond time
 
@@ -132,6 +134,9 @@ function calcPhysics() {
           
           if (clientList[clients.get(player.id)].hp <= 0) { //if the player is now dead, the player should die
             killPlayer(player.id);
+            scoreBoard[projectileList[i].constants.playerId].score += 1;
+            sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
+
           }
           projectileList.splice(i, 1); //delete projectile after hit
         }
@@ -148,6 +153,10 @@ function killPlayer(playerId) {
 
   clientList[clients.get(playerId)].isInGame = false;
   clientList[clients.get(playerId)].hp = 100; //debugging, später noch anders
+
+  scoreBoard[playerId].score = Math.floor(scoreBoard[playerId].score * 0.5); //loose half your points on death
+  sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
+
 
   //aus dem Weg mit dem Spieler, damit er nicht Schüsse blockiert und so
   clientList[clients.get(playerId)].position = menueSpawnPos;
@@ -237,6 +246,10 @@ function shootSlotAmmunition(characterId, playerId, velocityVector) {
               if (clientList[clients.get(id)].hp <= 0) {
                 //player died
                 killPlayer(id);
+                scoreBoard[playerId].score += 1;
+                sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
+
+
               }
             }
           }
@@ -245,13 +258,28 @@ function shootSlotAmmunition(characterId, playerId, velocityVector) {
 
       break; //only one shot per click, so the other slots dont have to be checked
     }
-  }
+  }  
+  sendSlotsAmmoInfo(mainAttackInfo, characterId, playerId, true);
+}
 
-  /*
-  1. check, if a slot is ready
-  2. Shoot at this slot, set new time of last shot, set slot to not ready
-  3. if no slot ready, do nothing
-  */
+function sendSlotsAmmoInfo(mainAttackInfo, characterId, playerId, shouldCheckLater) {
+    //send client how much ammo he has left
+    let currentAmmo = 0;
+    //check each slot if it has ammo ready
+    mainAttackInfo.slotsInfo.forEach((timeStamp) => {
+      if (Date.now() - timeStamp > timeBetweenShots[characterId][1] * 1000) {
+        currentAmmo ++;
+      } else {
+        if (shouldCheckLater) {
+          //not ready yet, but it is in the future -> then it has the be sent to the client
+          setTimeout(() => {
+            //check again
+            sendSlotsAmmoInfo(mainAttackInfo, characterId, playerId, false);
+          }, timeBetweenShots[characterId][1] * 1000 - (Date.now() - timeStamp) + 100) //+100 so 
+        }
+      }
+    })
+    sendTo({header: "ammoDetails", data: {maxAmmo: mainAttackMaxAmmoCapacity[characterId], currentAmmo: currentAmmo, state: 0}}, clientList[clients.get(playerId)].ws);
   
 }
 
@@ -307,7 +335,7 @@ function getLookVector(startVec, dirVec, bodyVec, near, far) {
 }
 
 //client Objekt Constructor (keine Ahnung ob das schöner geht)
-function client(id, ws, position, model, rotation, hp) {
+function client(id, ws, position, model, rotation, hp, name) {
   if (position == undefined) position = [0, 0, 0];
   if (rotation == undefined) rotation = 0;
   if (hp == undefined) hp = 100;
@@ -324,6 +352,7 @@ function client(id, ws, position, model, rotation, hp) {
   this.velocity = [0, 0, 0];
   this.lookVector = [0, 0, 0];
   this.cameraPos = [0, 0, 0];
+  this.name = name;
 }
 
 //check if message from client is JSON data
@@ -411,13 +440,17 @@ function attackForward(playerId, characterId) {
         //console.log(lookVector);
         if(isPointInCone(clientList[i].position, {startPosition: clientList[clientListIndex].position, maxAngle: 0.7, coneLength: 2, coneLookvector: lookVector})) {
           //player is in cone -> damage player
-          console.log("player is inside cone")
+          //console.log("player is inside cone")
           clientList[i].hp -= mainAttackDamage[characterId];          
           sendAll({header: "playerHit", data: {playerId: clientList[i].id, damage: mainAttackDamage[characterId]}});
 
           if (clientList[i].hp <= 0) {
             //player died
             killPlayer(clientList[i].id);
+            scoreBoard[playerId].score += 1;
+            sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
+
+
           }
         }
       }
@@ -442,14 +475,28 @@ function attackForward(playerId, characterId) {
           if (clientList[clients.get(id)].hp <= 0) {
             //player died
             killPlayer(id);
+            scoreBoard[playerId].score += 1;
+            sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
+
           }
         }
       }
-
-      //console.log(intersects[0]);
     }
+
+    //send client how much ammu is left
+    sendTo({header: "ammoDetails", data: {maxAmmo: mainAttackMaxAmmoCapacity[characterId], currentAmmo: clientList[clientListIndex].mainAttackInfo.ammunition, state: 0}}, clientList[clients.get(playerId)].ws);
+
+  } else {
+    //no ammo left
+    sendAll({header: "drawEffect", data: {effectType: 1, playerId: playerId, action: 1}});
   }
 }
+
+function sanitizeInput(input) {
+   return input.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+
 
 function getSpawnPos() { //calculates spawn pos farthest away from any player
   let minDistance = {distance: 1000}
@@ -478,12 +525,13 @@ function getSpawnPos() { //calculates spawn pos farthest away from any player
 createScene();
 
 wss.on('connection', (ws) => {
-  //chancen, dass es zwei gleiche uuidv4 gibt, sind ziemlich gering
   const id = uuidv4();
  
   //sendet dem Client die Map Daten
   sendTo({header: "mapData", mapObject}, ws);
-  sendTo({header: "yourPos", data: {position: menueSpawnPos, rotation: [0, 0, 0, 1], playerId: id, hp: 100}}, ws)
+  sendTo({header: "yourPos", data: {position: menueSpawnPos, rotation: [0, 0, 0, 1], playerId: id, hp: 100}}, ws);
+
+  scoreBoard[id] = {name: undefined, score: 0};
 
   //sendet dem neu gespawnten Spieler alle positionen und rotationen der Spieler
   clientList.forEach((player) => {
@@ -500,13 +548,13 @@ wss.on('connection', (ws) => {
   clients.set(id, clientList.length);
 
   //speichert infos, wie position, hp, usw. pro spieler
-  clientList.push(new client(id, ws, menueSpawnPos, createBasicObject({size: playerSize, position: menueSpawnPos, id: "player" + id}, true)));
+  clientList.push(new client(id, ws, menueSpawnPos, createBasicObject({size: playerSize, position: menueSpawnPos, id: "player" + id}, true), id));
 
 
   
 
   ws.on('message', (messageAsString) => {
-    if (!isJSON(messageAsString)) return; //ziemlich hässlich aber funktioniert : )
+    if (!isJSON(messageAsString)) return;
 
     let myclient = clientList[clients.get(id)];
     if (myclient == undefined) return; //es kann passieren, dass ein client disconnected und die events immer noch ankommen. Somit ist der client schon gelöscht aber es kommen noch sachen an. deswegen einfach ignorieren.
@@ -526,6 +574,15 @@ wss.on('connection', (ws) => {
 
       sendAll({header: "walkevent", data: {id: id, position: message.data.position, isGrounded: message.data.isGrounded}});
       moveObject(clientList[clients.get(id)].model, message.data.position);
+
+    } else if(message.header == "sendingName") {
+      //so no one can inject code via nicknames
+      message.data.name = sanitizeInput(message.data.name);
+
+      myclient.name = message.data.name;
+      scoreBoard[id].name = message.data.name;
+      //console.log(scoreBoard);
+      sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
 
     } else if (message.header == "rotateevent") {
       //ein spieler hat sich gedreht, den anderen wird das nun mitgeteilt
@@ -655,14 +712,18 @@ wss.on('connection', (ws) => {
 
     } else if (message.header == "reloading") {
       console.log("wants to reload")
-      if (myclient.mainAttackInfo != undefined) {
+      if (myclient.mainAttackInfo != undefined && (characterMainWeaponType[myclient.characterId] == 0 || characterMainWeaponType[myclient.characterId] == 2)) {
         if (myclient.mainAttackInfo.ammunition != mainAttackMaxAmmoCapacity[myclient.characterId] &&  myclient.mainAttackInfo.isReloading == false) {
           //begins reloading
+          sendTo({header: "ammoDetails", data: {state: 1}}, myclient.ws);
+          
           myclient.mainAttackInfo.isReloading = true;
           console.log("starts reloading")
 
           //reload
           setTimeout(() => {
+            sendTo({header: "ammoDetails", data: {maxAmmo: mainAttackMaxAmmoCapacity[myclient.characterId], currentAmmo: mainAttackMaxAmmoCapacity[myclient.characterId], state: 0}}, myclient.ws);
+
             console.log("reloaded");
             myclient.mainAttackInfo.ammunition = mainAttackMaxAmmoCapacity[myclient.characterId];
             myclient.mainAttackInfo.isReloading = false;
@@ -675,6 +736,10 @@ wss.on('connection', (ws) => {
 
   //falls ein client disconnected
   ws.on("close", () => {
+    
+    delete scoreBoard[id];
+    sendAll({header: "scoreBoardChange", data: {scoreBoard: scoreBoard}});
+
     sendAll({header: "playerDisconnected", data: {playerId: id}}); //teilt den Clients mit, dass ein spieler gegangen ist
     scene.remove(clientList[clients.get(id)].model); //löscht das Model des Spielers, welches gebraucht wird, um Raycasts durchzuführen
     clientList.splice(clients.get(id), 1); //löscht den Listeneintrag ohne eine freie Stelle zurückzulassen

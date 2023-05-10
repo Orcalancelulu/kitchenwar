@@ -14,12 +14,73 @@ body {
     height: 100%;
 }
 
+.scoreClass {
+    border-style: solid none none none;
+    margin: 0;
+    padding: 10px;
+    
+}
+
+#scoreTitle {
+    font-size: 30px;
+    margin: 0;
+    text-align: center;
+    color: white;
+}
+
+#reloadContainer {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: block;
+    min-width: 200px;
+    padding: 20px 50px 20px 50px;
+    font-size: 20px;
+    font-weight: bold;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.6);
+    border: none;
+    user-select: none;
+
+}
 
 #menue {
     display: grid;
     grid-template-rows: auto auto auto;
     z-index: 10;
     padding-top: 350px;
+}
+
+#scoreboardContainer {
+    position: absolute;
+    display: block;
+    right: 0;
+    padding: 10px 20px 10px 20px;
+    background-color: rgba(0, 0, 0, 0.6);
+    border: none;
+    user-select: none;
+}
+
+#scoreboard {
+    text-align: right;
+    font-size: 15px;
+    font-weight: bold;
+    color: white;
+    padding: 0;
+    margin: 0;
+}
+
+#nickname {
+    display: block;
+    margin: 5px auto 5px auto;
+    max-width: 200px;
+    padding: 20px 50px 20px 50px;
+    font-size: 30px;
+    font-weight: bold;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.6);
+    border: none;
+    outline: none;    
 }
 
 .characterCard {
@@ -35,13 +96,14 @@ body {
 }
 
 .character_logo {
-    width: 200px;
+    
+    max-height: 200px;
 }
 
 #chooseCharacters {
     position: fixed;
     width: 80%;
-    top: 35%;
+    top: 15%;
     left: 10%;
     display: none;
     grid-template-columns: auto auto auto auto;

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {PointerLockControls} from "PointerLockControls"
 import { GLTFLoader } from 'GLTFLoader';
 
+
 import Stats from '/three/examples/jsm/libs/stats.module.js' //stats for fps and memory... #debugging
 
 
@@ -30,6 +31,12 @@ let mapData;
 
 let playerIdToIndex = new Map();
 let playerList = [];
+
+//generate random nickname. If nickname cookie is already there, this random name will be overwritten by it
+let ownNickname = "player" + Math.floor(Math.random()*1000);
+if (getCookie("nickname") != undefined && getCookie("nickname") != "") ownNickname = getCookie("nickname");
+document.getElementById("nickname").value = ownNickname;
+
 
 let isKeyPressed = {keyCodes: {}}
 
@@ -114,115 +121,7 @@ let whereToMoveAtCollision = {
 
 
 
-
-// modulo zigzag funktion machen, von 0-1 immer wieder
-// https://github.com/mrdoob/three.js/blob/master/examples/webgl_buffergeometry_custom_attributes_particles.html
-// anstatt size einfach position ändern
-// anhand von vorbestimmter form presets auswählen (cone speedy, sphere floating fixed or random pos)
-
-
 //anfang debugging
-
-//11000011111011011111001100100100111110010
-//11011011111001100100100111110010
-
-
-function particleTesting() {
-
-
-  let uniforms = {
-
-    pointTexture: { value: new THREE.TextureLoader().load( 'texture/wasserdampf.png' ) }
-    
-
-  };
-
-  const shaderMaterial = new THREE.ShaderMaterial( {
-
-    uniforms: uniforms, //attribute float size; varying vec3 vColor;
-    vertexShader: `
-    
-    varying vec3 vColor;
-    attribute float isVisible;
-    attribute float lifeCycleFactor;
-
-    varying float lifeCycleFactorForFragment;
-
-    void main() {
-      
-      lifeCycleFactorForFragment = lifeCycleFactor;
-
-      vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-
-      gl_PointSize = 1.2 * ( 300.0 / -mvPosition.z ) * isVisible  * (0.8 * lifeCycleFactor + 0.2);
-
-      gl_Position = projectionMatrix * mvPosition;
-
-    }`, //varying vec3 vColor;
-    fragmentShader: `	
-    uniform sampler2D pointTexture;
-    varying vec3 vColor;
-    varying float lifeCycleFactorForFragment;
-
-    void main() {
-
-      gl_FragColor = vec4( vec3(1.0, 1.0, 1.0), 1.0 - lifeCycleFactorForFragment);
-
-      gl_FragColor = gl_FragColor * texture2D( pointTexture, gl_PointCoord );
-
-    }`,
-
-    
-    
-    transparent: true,
-    depthWrite: false
-
-  } );
-
-
-  const particleCount = 32;
-
-  const positions = [];
-  const velocities = [];
-  const startTimeStamp = [];
-  const isVisible = [];
-  const lifeCycleFactor = [];
-
-
-
-  let lookVector = getLookDirectionOfObject(camera).normalize().multiplyScalar(3);
-  console.log(lookVector);
-
-  for (var i = 0; i<particleCount; i++) {
- 
-    velocities.push(0); //velocities are getting calculated in the particle animation, not here, therefore just placeholder 0
-    velocities.push(0);
-    velocities.push(0);
-
-    positions.push(0); //points are getting calculated in the particle animation, not here, therefore just placeholder 0
-		positions.push(0);
-		positions.push(0);
-
-    startTimeStamp.push(0); //placeholder
-    isVisible.push(0); //0 = not visible
-    lifeCycleFactor.push(0);
-  } 
-
-  particleGeo.setAttribute( 'position', new THREE.Float32BufferAttribute(positions, 3)); //3 means 3 per particle (32 bits is the maximum :| )
-  particleGeo.setAttribute( 'velocities', new THREE.Float32BufferAttribute(velocities, 3));
-  particleGeo.setAttribute( 'startTimeStamp', new THREE.Float32BufferAttribute(startTimeStamp, 1));
-  particleGeo.setAttribute( 'isVisible', new THREE.Float32BufferAttribute(isVisible, 1));
-  particleGeo.setAttribute( 'lifeCycleFactor', new THREE.Float32BufferAttribute(lifeCycleFactor, 1));
-
-
-  let particleSystem = new THREE.Points( particleGeo, shaderMaterial);
-  particleSystem.frustumCulled = false; //so its visible, even if the main coordinate is not
- 
-
-  scene.add(particleSystem);
-  moveObject(particleSystem, [0, 0, 0]);
-  //return particleSystem;
-}
 
 function getCoordsOfRaycast(axis) {
   let lookVector = getLookDirectionOfObject(camera);
@@ -346,8 +245,8 @@ let amlight = new THREE.AmbientLight(0xFFFFFF, 0.8);
 let spotLight = new THREE.SpotLight(0xFFFFFF, 0);
 let dilight = new THREE.DirectionalLight(0xFFFFFF, 1.4);
 dilight.shadow.camera.top = 20;
-dilight.shadow.camera.bottom = -20;
-dilight.shadow.camera.left = -30;
+dilight.shadow.camera.bottom = -45;
+dilight.shadow.camera.left = -45;
 dilight.shadow.camera.right = 50;
 
 let dilightTarget = new THREE.Object3D();
@@ -404,7 +303,7 @@ const createSkybox = async () => {
   const loader = new THREE.CubeTextureLoader();
   loader.setPath('texture/');
   const cubeTex = loader.load( [
-    "2left.png", "3right.png", "4up.png", "5down.png", "0front.png", "1back.png"
+    "3right_2.png", "3right_2.png", "4up.png", "5down.png", "0front_2.png", "3right_2.png"
   ])
   scene.background = cubeTex;
 
@@ -449,6 +348,7 @@ const addGltfToScene = () => {
     gltf.scene.scale.set(5, 5, 5);
     moveObject(gltf.scene, [30, 4, 40]);
     scene.add(gltf.scene);
+   ;
     gltf.scene.castShadow = true;
     gltf.scene.receiveShadow = true;
     gltf.scene.layers.set(1);
@@ -463,11 +363,11 @@ const addGltfToScene = () => {
 
   },	function ( xhr ) {
 
-		console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
+		//console.log( ( xhr.loaded / xhr.total * 100 ) + '% loaded' );
 
 	}, 	function ( error ) {
 
-		console.log( 'An error happened' );
+		//console.log( 'An error happened' );
 
 	})
 }
@@ -608,7 +508,7 @@ const createPlayerModel = (pos) => {
 }
 
 const loadBetterModel = (modelPath, playerId, pos, shouldCreateCameraControl, rotation) => {
-  console.log(modelPath);
+  //console.log(modelPath);
   const loader = new GLTFLoader();
   loader.load(modelPath, function ( gltf ) {
     gltf.scene.scale.set(0.2, 0.2, 0.2);
@@ -632,6 +532,31 @@ const loadBetterModel = (modelPath, playerId, pos, shouldCreateCameraControl, ro
 
 }
 
+//this function is from: https://www.w3schools.com/js/js_cookies.asp
+function setCookie(cname, cvalue, exdays) {
+  const d = new Date();
+  d.setTime(d.getTime() + (exdays*24*60*60*1000));
+  let expires = "expires="+ d.toUTCString();
+  document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+}
+
+//this function is from: https://www.w3schools.com/js/js_cookies.asp
+function getCookie(cname) {
+  let name = cname + "=";
+  let decodedCookie = decodeURIComponent(document.cookie);
+  let ca = decodedCookie.split(';');
+  for(let i = 0; i <ca.length; i++) {
+    let c = ca[i];
+    while (c.charAt(0) == ' ') {
+      c = c.substring(1);
+    }
+    if (c.indexOf(name) == 0) {
+      return c.substring(name.length, c.length);
+    }
+  }
+  return "";
+}
+
 const createPlayer = (pos, id, hp, myPlayer, rotation) => {
   let index = playerList.length;
   if (playerIdToIndex.get(id) != undefined) return;
@@ -641,7 +566,7 @@ const createPlayer = (pos, id, hp, myPlayer, rotation) => {
   playerIdToIndex.set(id, index);
   playerList[index] = new player(id, pos, createPlayerModel(pos), hp);
   loadBetterModel("models/wasserkocher/wasserkocher.glb", id, pos, myPlayer, rotation); //loads the real model, takes longer so a dummy model gets loaded first for movement (only few millisec)
-  console.log("loading model");
+  //console.log("loading model");
 
 }
 
@@ -678,7 +603,7 @@ const getBoxBounds = (position, dimensions) => {
 }
 
 const removePlayer = (id) => {
-  console.log("removed player");
+  //console.log("removed player");
   
   let index = playerIdToIndex.get(id);
 
@@ -743,7 +668,22 @@ const createCameraControl = (rot) => {
     //console.log(camera.position);
     camera.quaternion.copy(playerList[0].model.quaternion);
     
-    if (playerList[0].isOnStandby) ws.send(JSON.stringify({header: "joiningGame"}));
+    if (playerList[0].isOnStandby) {
+      ws.send(JSON.stringify({header: "joiningGame"}));
+
+      let nickname = document.getElementById("nickname").value;
+      
+      if (nickname.length > 16) nickname = nickname.substr(0, 15) + "...";
+
+      document.getElementById("nickname").disabled = true;
+      //console.log(nickname);
+      if (nickname == "" || nickname == undefined) nickname = ownNickname;
+      ownNickname = nickname;
+      setCookie("nickname", ownNickname, 7);
+
+      console.log("sended nickname: " + ownNickname);
+      ws.send(JSON.stringify({header: "sendingName", data: {name: ownNickname}}));
+    } 
 
     playerList[0].model.visible = true;
   } );
@@ -822,7 +762,7 @@ const putInGame = (playerId, isMyPlayer, spawnPos, characterId) => {
 
   } else {
     playerList[index].model.visible = true;
-    console.log("loading stuff");
+    //console.log("loading stuff");
     loadBetterModel(modelPaths[characterId], playerId, spawnPos, false);
   }
 
@@ -1044,7 +984,7 @@ function updateParticles() {
 
       if ((currentTime - uniformStartTimeStamp) * timeFactor > 1) {
         //delete particle System, particle animation is at its end
-        console.log("removing explosion");
+        //console.log("removing explosion");
         removeParticleSystem(key);
 
       } else {
@@ -1146,93 +1086,6 @@ function updateParticles() {
   });
 }
 
-function updateTestParticles() {
-
-
-  //moveObject(particleSystem, playerList[0].position);
-
-  let positions = particleGeo.attributes.position.array;
-  let velocities = particleGeo.attributes.velocities.array;
-  let startTimeStamp = particleGeo.attributes.startTimeStamp.array;
-  let isVisible = particleGeo.attributes.isVisible.array;
-  let lifeCycleFactor = particleGeo.attributes.lifeCycleFactor.array;
-
-  //console.log(startTimeStamp);
-
-  const particleSpeed = 0.002;
-  const coneLength = 2;
-  const currentTime = (Date.now() << 1) >>> 1; //damit currentTime weniger bits braucht und in einem 32 bit Float platz hat
-  
-  //console.log(currentTime);
-  
-  let particlesToCreate = 0;
-  let localLookVector;
-  
-
-  if (needsKettleParticles) { //button is being held down, player is attacking -> particles are needed
-    particlesToCreate = 1;
-
-    let lookVector = getLookDirectionOfObject(playerList[0].model); //noch ändern, falsche richtung
-    
-    localLookVector = new THREE.Vector3().copy(lookVector);
-    let randomDirection = new THREE.Vector3().randomDirection().multiplyScalar(0.4);
-    localLookVector.add(randomDirection).normalize();  
-
-  }
-
-  //for each particle in this particle system
-  for (var i = 0; i< positions.length/3; i++) {
-    let timeFactor = (particleSpeed * (currentTime - startTimeStamp[i])); //gives a number between 0 and 1, triangle graph
-
-    if (isVisible[i] == 1) {
-      //check if it should be deleted
-      //console.log(timeFactor)
-      if (timeFactor > 1) {
-        isVisible[i] = 0; 
-
-        positions[3*i + 0] = 0;
-        positions[3*i + 1] = 0;
-        positions[3*i + 2] = 0;
-
-        continue;
-      } 
-
-      lifeCycleFactor[i] = timeFactor;
-
-      positions[3*i + 0] = velocities[3*i + 0] * timeFactor * coneLength + playerList[0].position[0];
-      positions[3*i + 1] = velocities[3*i + 1] * timeFactor * coneLength + playerList[0].position[1];
-      positions[3*i + 2] = velocities[3*i + 2] * timeFactor * coneLength + playerList[0].position[2];
-
-    } else if(particlesToCreate > 0) {
-      isVisible[i] = 1;
-      lifeCycleFactor[i] = 2;
-
-      positions[3*i + 0] = 0;
-      positions[3*i + 1] = 0; //hier falls nötig offset anpassen
-      positions[3*i + 2] = 0;
-
-      velocities[3*i + 0] = -localLookVector.x;
-      velocities[3*i + 1] = -localLookVector.y;
-      velocities[3*i + 2] = -localLookVector.z;
-
-
-      startTimeStamp[i] = currentTime;
-
-
-
-      particlesToCreate -= 1;
-    }
-  }
-
-
-  //particleGeo.attributes.startTimeStamp.needsUpdate = true;
-  particleGeo.attributes.lifeCycleFactor.needsUpdate = true;
-  particleGeo.attributes.position.needsUpdate = true;
-  particleGeo.attributes.isVisible.needsUpdate = true;
-
-}
-
-
 
 function animate() {
   deltaTime = time.deltaTime;
@@ -1249,6 +1102,8 @@ function animate() {
 
   //updateTestParticles();
   updateParticles();
+
+  //composer.render();
  
   renderer.render(scene, camera);
 };
@@ -1257,6 +1112,8 @@ function animate() {
 
 const resize = () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
+  //composer.setSize(window.innerWidth, window.innerHeight);
+
   camera.aspect = window.innerWidth / window.innerHeight;
   
   camera.updateProjectionMatrix();
@@ -1266,8 +1123,14 @@ const resize = () => {
 const createScene = (el) => {
   renderer = new THREE.WebGLRenderer({canvas: el, antialias: true});
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.VSMShadowMap;
   renderer.shadowMap.autoUpdate = false;
+
+  //composer = new EffectComposer( renderer );
+
+  //const ssaoPass = new SSAOPass(scene, camera, false, true);
+	//ssaoPass.kernelRadius = 0;
+  //composer.addPass( ssaoPass );
 
   addGltfToScene();
 
@@ -1344,7 +1207,7 @@ const updateHealth = (playerId, damage) => {
 
   updateFloatingHp(playerList[playerIdToIndex.get(playerId)].hp, playerId); //ingame healthbar
 
-  console.log(playerList[playerIdToIndex.get(playerId)].hp);
+  //console.log(playerList[playerIdToIndex.get(playerId)].hp);
 
 }
 
@@ -1415,7 +1278,7 @@ const createObject = (object) => {
     })
 
   } else {
-    console.log("can't create object");
+    //console.log("can't create object");
   }
 };
 
@@ -1444,7 +1307,7 @@ const generateMap = (mapObject) => {
 };
 
 const createListener = () => {
-  console.log("listener activated");
+  //console.log("listener activated");
   document.body.addEventListener("keydown", (event) => {
     isKeyPressed.keyCodes[event.code] = true;
     
@@ -1511,16 +1374,17 @@ function getIdsFromObjectList(objectList, keyToFind) {
 
 //moveObject(camera, [3, 1, -3]);
 moveObject(dilight, [-20, 40, 44.19]);
+
 /*const helper = new THREE.CameraHelper( dilight.shadow.camera );
 scene.add( helper );*/
 //dilight.lookAt(new THREE.Vector3(0, 0, 0));
 dilight.castShadow = true;
 dilight.shadow.mapSize.width = 2048;
 dilight.shadow.mapSize.height = 2048;
-moveObject(dilightTarget, [[35, 0, 30]])
+moveObject(dilightTarget, [[-20, 0, 30]])
 dilight.target.position.set(35, 0, 30);
 dilight.target.updateMatrixWorld();
-dilight.shadow.normalBias = 0.2; //shadow doesn't have stripes with that
+dilight.shadow.normalBias = 2; //shadow doesn't have stripes with that
 
 moveObject(spotLight, [25.04, 13.82, 22.98]);
 spotLight.target.position.set(25.04, 0, 22.98);
@@ -1617,7 +1481,7 @@ function createNewProjectile(position, projectileType, id, index, velocity) {
   const trailId = uuidv4();
   const maxParticles = 10;
   particleSystemObjects[trailId] = {id: trailId, particleSize: 0.2, particleSystemType: 0, pointList: [], maxPointListLength: maxParticles, particleObj: createParticleObject({texture: "texture/wasserdampf.png", vertexShader: particleVertexShader, fragmentShader: particleFragmentShader, maxParticles: maxParticles, particleSystemType: 0, position: [0, 0, 0]})}
-  console.log(particleSystemObjects);
+  //console.log(particleSystemObjects);
   return {position: position, type: projectileType, id: id, trailId: trailId, model: createProjectileModel(projectileType, index, velocity)};
 }
 
@@ -1709,7 +1573,7 @@ function updateProjectiles(serverProjectileList) {
       //add explosion particles
       const particleId = uuidv4();
       particleSystemObjects[particleId] = {particleSize: 1, particleSpeed: 0.01, timeFactor: 0.001,dragFactor: 0.01, gravityFactor: 0.0, uniformStartTimeStamp: (Date.now() << 1) >>> 1, id: particleId, particleSystemType: 1, particleObj: createParticleObject({texture: "texture/wasserdampf.png", vertexShader: particleVertexShader, fragmentShader: particleFragmentShader, maxParticles: 32, particleSystemType: 1, position: projectileList[i].position})}
-      console.log(particleSystemObjects);
+      //console.log(particleSystemObjects);
       //delete projectile
       scene.remove(projectileList[i].model);
       projectileList.splice(i, 1);
@@ -1740,7 +1604,7 @@ function rayChecker(startVec, dirVec, near, far) {
     }
     if (intersects[0].distance < 1) intersects[0] = intersects[1];
     sphere.position.set(intersects[0].point.x, intersects[0].point.y, intersects[0].point.z);
-    console.log(sphere.position);
+    //console.log(sphere.position);
     return intersects[0].point;
   }
 }
@@ -1764,7 +1628,7 @@ function uuidv4() {
 
 start of websocket code*/
 
-const shouldConnectToLocalHost = false;
+const shouldConnectToLocalHost = true;
 
 let ws;
 
@@ -1810,14 +1674,15 @@ ws.onmessage = (event) => {
     playerList = [];
     createPlayer(message.data.position, message.data.playerId, message.data.hp, true, message.data.rotation);
 
+
   } else if(message.header == "newPlayer") {
     //falls ein neuer spieler connected, muss dieser erstellt werden
-    console.log("new player connected");
+    //console.log("new player connected");
     createPlayer(message.data.position, message.data.playerId, message.data.hp, false);
 
   } else if (message.header == "playerDisconnected") {
     //falls jemand disconnected, muss dieser spieler auch verschwinden
-    console.log("player disconnected: " + message.data.playerId);
+    //console.log("player disconnected: " + message.data.playerId);
     removePlayer(message.data.playerId);
 
   } else if (message.header == "playerHit") {
@@ -1825,11 +1690,11 @@ ws.onmessage = (event) => {
     updateHealth(message.data.playerId, message.data.damage);
 
   } else if (message.header == "playerJoined") {
-    console.log("Player joined the game: " + message.data.characterId);
+    //console.log("Player joined the game: " + message.data.characterId);
     putInGame(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0, message.data.position, message.data.characterId);
     
   } else if (message.header == "putToStandby") {
-    console.log("Putting to standby because: " + message.data.cause);
+    //console.log("Putting to standby because: " + message.data.cause);
     putToStandby(message.data.playerId, playerIdToIndex.get(message.data.playerId) == 0);
 
   } else if (message.header == "updateOfProjectiles") {
@@ -1858,7 +1723,7 @@ ws.onmessage = (event) => {
         if (line.material.opacity < 0.05) {
           clearInterval(lineInterval);
           scene.remove(line);
-          console.log("deleted");
+          //console.log("deleted");
         }
       }, 40)
             
@@ -1878,6 +1743,53 @@ ws.onmessage = (event) => {
         //stop particle animation
         particleSystemObjects[playerList[playerIdToIndex.get(message.data.playerId)].particleSystemId].active = false;
       }
+    }
+  } else if (message.header == "scoreBoardChange") {
+
+    //delete all scoreobjects
+    document.getElementById("scoreboard").innerHTML = '';
+
+    let sortedScoreArray = [];
+    let scoreObjectsArray = [];
+
+
+    //fill sortedScoreArray with all scores (not sorted yet)
+    Object.keys(message.data.scoreBoard).forEach((key) => {
+      sortedScoreArray.push(message.data.scoreBoard[key].score);
+    });
+
+    //sort sortedScoreArray, highest score first
+    sortedScoreArray.sort((a, b) => b-a);
+
+    //calculate the position in the list with sortedScoreArray and fill this slot in scoreObjectsArray
+    Object.keys(message.data.scoreBoard).forEach((key) => {
+      let place = sortedScoreArray.indexOf(message.data.scoreBoard[key].score) //0 on top
+      sortedScoreArray[place] = -1; //sortedScoreArray gets changed so if there are two scores which are the same, it wont take the same score two times in a row 
+      scoreObjectsArray[place] = message.data.scoreBoard[key];
+    });
+
+
+    //create for each score in scoreObjectsArray an element to display
+    let count = 0;
+    scoreObjectsArray.forEach((scoreObject) => {
+      if (count >= 5) return; //only show the top 5 players, topScore
+      console.log(count);
+      let scoreElement = document.createElement("p");
+
+      scoreElement.innerHTML = scoreObject.name + ": " + "<span style='color: red'>" + scoreObject.score + "</span>"; 
+      scoreElement.setAttribute("class", "scoreClass");
+      document.getElementById("scoreboard").appendChild(scoreElement);
+
+      count++;
+    });
+  } else if (message.header == "ammoDetails") {
+    console.log(message.data);
+    
+    //not reloading
+    if (message.data.state == 0) {
+      document.getElementById("reloadInfo").innerHTML = message.data.currentAmmo + "/" + message.data.maxAmmo;
+    } else {
+      document.getElementById("reloadInfo").innerHTML = "reloading...";
     }
   }
 }
