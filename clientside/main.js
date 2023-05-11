@@ -320,9 +320,12 @@ function applyChangesToAllChildren(objects, layer, alpha, shouldCastShadows) {
   })
 }
 
+//if player presses on the ultra Graphics button, another scene will be loaded with baked lighting 
 document.getElementById("ultraGraphics").addEventListener("click", () => {
   addGltfToScene("models/kitchen_optimized_2.glb");
+  //dilight is the sun, won't be needed now because the scene already has baked sunlight
   dilight.intensity = 0;
+  //amlight, how bright the whole scene is
   amlight.intensity = 1.4;
 })
 
