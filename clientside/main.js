@@ -6,7 +6,7 @@ import { GLTFLoader } from 'GLTFLoader';
 import Stats from '/three/examples/jsm/libs/stats.module.js' //stats for fps and memory... #debugging
 
 
-
+//used to display the fps stats on the top left
 const stats = Stats() // stats
 document.body.appendChild(stats.dom) //stats
 
@@ -38,7 +38,7 @@ document.getElementById("nickname").value = ownNickname;
 
 let isKeyPressed = {keyCodes: {}}
 
-
+//used to create the collision list, not used anymore
 let getColliderCoordsDebuggingX = [];
 let getColliderCoordsDebuggingZ = [];
 let getColliderCoordsDebuggingY = [];
@@ -166,7 +166,6 @@ function takeCoordsAndPrintOut() {
 
 
 let amlight = new THREE.AmbientLight(0xFFFFFF, 0.8);
-let spotLight = new THREE.SpotLight(0xFFFFFF, 0);
 let dilight = new THREE.DirectionalLight(0xFFFFFF, 1.4);
 dilight.shadow.camera.top = 20;
 dilight.shadow.camera.bottom = -45;
@@ -177,7 +176,7 @@ let dilightTarget = new THREE.Object3D();
 
 
 
-scene.add(amlight, dilight, dilightTarget, spotLight);
+scene.add(amlight, dilight, dilightTarget);
 //ende debugging
 
 //attacking, mousedown = charging (only with some characters)
@@ -416,6 +415,7 @@ function checkPlayerCollision(afterMove) {
 
   }
   
+  //every object in all close chunks get checked, if player is standing in them
   chunksToCheck.forEach((chunk) => {
     chunk = chunkList[chunk];
 
@@ -427,7 +427,7 @@ function checkPlayerCollision(afterMove) {
       let colliding = doBoxesCollide(playerBounds, bounds);
       if (colliding) { //part of player is inside object
         if (objectToCheck.actionOnCollision == "collide" || objectToCheck.actionOnCollision == undefined) {
-          let disBounds = [];
+          let disBounds = []; //distance for each face to face (top to bottom face, left to right face...)
           for (var i = 0; i<3; i++) {
             disBounds[2*i] = Math.abs(bounds[2*i]-playerBounds[2*i+1]);
             disBounds[2*i+1] = Math.abs(bounds[2*i+1]-playerBounds[2*i]);
@@ -1388,12 +1388,7 @@ dilight.target.position.set(35, 0, 30);
 dilight.target.updateMatrixWorld();
 dilight.shadow.normalBias = 0.02; //shadow doesn't have stripes with that, but horizontal and vertical get shifted a bit
 
-moveObject(spotLight, [25.04, 13.82, 22.98]);
-spotLight.target.position.set(25.04, 0, 22.98);
-spotLight.target.updateMatrixWorld();
 
-spotLight.angle = 0.4;
-spotLight.penumbra = 0.7;
 
 //ende debugging
 
