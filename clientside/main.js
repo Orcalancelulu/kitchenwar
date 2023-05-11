@@ -56,7 +56,7 @@ let keyMapList = {
 };
 
 //movementType: welche art von bewegen. Entweder laufen oder fahren (wie bagger), jedes Objekt für ein Charaker
-let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.003, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
+let movementDataPresets = [{movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 1, moveSpeed: 0.005, dampFactor: 1.05, inAirDampFactor: 1.02, turnSpeed: 0.04, currentSpeed: 0}, {movementType: 0, moveSpeed: 0.03, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}, {movementType: 0, moveSpeed: 0.015, dampFactor: 0.2, inAirDampFactor: 0.02}]
 
 //default is kettle
 let movementData = movementDataPresets[0];
@@ -666,7 +666,7 @@ function createCameraControl(rot) {
       ownNickname = nickname;
       setCookie("nickname", ownNickname, 7);
 
-      console.log("sended nickname: " + ownNickname);
+      console.log("sent nickname: " + ownNickname);
       ws.send(JSON.stringify({header: "sendingName", data: {name: ownNickname}}));
 
 
@@ -1631,7 +1631,7 @@ function uuidv4() {
 start of websocket code*/
 
 //if true, it connects to a localhost, if false, it connects to the public server
-const shouldConnectToLocalHost = false;
+const shouldConnectToLocalHost = true;
 
 let ws;
 
