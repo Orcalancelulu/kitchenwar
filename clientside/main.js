@@ -1631,7 +1631,7 @@ function uuidv4() {
 start of websocket code*/
 
 //if true, it connects to a localhost, if false, it connects to the public server
-const shouldConnectToLocalHost = false;
+const shouldConnectToLocalHost = true;
 
 let ws;
 

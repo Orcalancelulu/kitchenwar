@@ -425,7 +425,7 @@ function isPointInCone(point, coneObject) {
 function attackForward(playerId, characterId) {
   let clientListIndex = clients.get(playerId);
 
-  if (clientList[clientListIndex].mainAttackInfo.timeStampOfLastShot == undefined || clientList[clientListIndex].mainAttackInfo.ammunition == undefined) return;
+  if (clientList[clientListIndex].mainAttackInfo == undefined) return;
 
   let lookVector = clientList[clientListIndex].lookVector; //camera looks like this, but not playermodel, therefore raycast from camera and make vector between point hit and model Position
   lookVector = new THREE.Vector3(...lookVector); //convert lookVector from array to threeJs vector
