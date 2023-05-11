@@ -323,6 +323,7 @@ function applyChangesToAllChildren(objects, layer, alpha, shouldCastShadows) {
 document.getElementById("ultraGraphics").addEventListener("click", () => {
   addGltfToScene("models/kitchen_optimized_2.glb");
   dilight.intensity = 0;
+  amlight.intensity = 1.4;
 })
 
 //loads kitchen / map
@@ -1245,7 +1246,7 @@ function updateFloatingHp(hp, playerId) {
 function updateOwnHp() {
   const maxHp = 100;
   document.getElementById("healthBar").style.width = (100*(playerList[0].hp / maxHp)).toString() + "%";
-  document.getElementById("healthDisplay").innerHTML = playerList[0].hp;
+  document.getElementById("healthDisplay").innerHTML = playerList[0].hp + " Hp";
 }
 
 //creates an object, used to create the dummyModel for the player
