@@ -64,7 +64,7 @@ let movementData = movementDataPresets[0];
 let modelPaths = ["models/wasserkocher/wasserkocher.glb", "models/toaster/toaster2.glb", "models/mixer/mixer.glb", "models/knife_block/knife_block.glb", "models/coffee_can/coffee_can.glb"];
 let projectileModelPaths = ["", "models/toaster/toast.glb", "models/mixer/mixer_projectile.glb", "", ""] //when path is emtpy, those character doesn't have any projectiles
 
-let playerSizes = [[0.4, 1, 0.4],  [0.5, 0.27, 0.5], [0.4, 0.9, 0.4], [0.4, 1, 0.4], [0.4, 1.1, 0.4]];
+let playerSizes = [[0.4, 0.7, 0.4],  [0.5, 0.27, 0.5], [0.4, 0.7, 0.4], [0.4, 1, 0.4], [0.4, 1.1, 0.4]];
 let playerSize = playerSizes[0]; //default is kettle
 
 let controls; //used for pointerLockControls
@@ -1630,7 +1630,7 @@ function uuidv4() {
 start of websocket code*/
 
 //if true, it connects to a localhost, if false, it connects to the public server
-const shouldConnectToLocalHost = true;
+const shouldConnectToLocalHost = false;
 
 let ws;
 

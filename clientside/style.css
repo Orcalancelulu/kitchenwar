@@ -187,14 +187,14 @@ body {
     position: absolute;
     left: 0;
     bottom: 0;
-    width: 230px;
+    width: 240px;
     height: 85px;
 }
 
 
 #healthBarContainer {
     position: absolute;
-    left: 100px;
+    left: 110px;
     bottom: 25px;
     width: 100px;
     height: 30px;
