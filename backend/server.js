@@ -1,6 +1,9 @@
 const THREE = require("three");
 const WebSocket = require('ws');
+var http = require('http');
+
 const wss = new WebSocket.Server({ port: 7031 });
+
 
 let clientList = [];
 const scene = new THREE.Scene();
@@ -71,6 +74,12 @@ let mapObject = {
 }
 
 //fertig hardcoded
+
+
+http.createServer(function (req, res) {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('server running');
+}).listen(8081);
 
 function addNewProjectile(projectile) { //OnOrOff: false = turn off, true = turn on
 
